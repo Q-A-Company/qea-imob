@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  // Começa null (não sabemos ainda no servidor/primeira renderização) —
-  // o script inline em app/layout.tsx já aplicou a classe antes do paint,
-  // aqui só sincroniza o estado do React com o que já está no DOM.
+  // O <html> já vem com a classe certa desde o HTML gerado pelo servidor
+  // (app/layout.tsx lê o cookie "theme") — aqui só sincroniza o estado do
+  // React com o que o DOM já tem, sem risco de flash nem de mismatch.
   const [isDark, setIsDark] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -15,7 +15,9 @@ export function ThemeToggle() {
   function toggle() {
     const next = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("theme", next ? "dark" : "light");
+    // Cookie, não localStorage — precisa ser legível pelo servidor
+    // (app/layout.tsx) na próxima navegação/reload, não só pelo cliente.
+    document.cookie = `theme=${next ? "dark" : "light"}; path=/; max-age=31536000; SameSite=Lax`;
     setIsDark(next);
   }
 

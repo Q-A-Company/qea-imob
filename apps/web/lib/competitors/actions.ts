@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
+import { ALLOWED_POLLING_INTERVALS } from "./constants";
 
 export interface CheckCompetitorNowState {
   result?: {
@@ -121,8 +122,8 @@ export async function registerCompetitorAction(
   if (!name) return { error: "Nome é obrigatório" };
   if (!abbreviation || abbreviation.length > 6) return { error: "Abreviação precisa ter entre 1 e 6 caracteres" };
   if (!listingUrl || !listingUrl.startsWith("http")) return { error: "URL da listagem inválida" };
-  if (!Number.isFinite(pollingIntervalMinutes) || pollingIntervalMinutes <= 0) {
-    return { error: "Intervalo de checagem inválido" };
+  if (!ALLOWED_POLLING_INTERVALS.includes(pollingIntervalMinutes as (typeof ALLOWED_POLLING_INTERVALS)[number])) {
+    return { error: `Intervalo precisa ser um dos valores permitidos: ${ALLOWED_POLLING_INTERVALS.join(", ")} min` };
   }
 
   const supabase = await createClient();
@@ -239,6 +240,59 @@ export async function discardSiteConfigAction(competitorId: string): Promise<Dis
 
   const { error } = await supabase.from("competitors").delete().eq("id", competitorId);
   if (error) return { error: `Falha ao descartar: ${error.message}` };
+
+  revalidatePath("/admin/competitors");
+  return { success: true };
+}
+
+export interface UpdateCompetitorState {
+  error?: string;
+  success?: boolean;
+}
+
+// Pausar/retomar checagem automática. getDueCompetitors() (Etapa 5,
+// packages/scraper/jobs/scheduler.ts) já filtra .eq("status", "ativo") —
+// confirmado lendo o código antes de construir este botão, não assumido —
+// então um concorrente 'pausado' aqui realmente para de ser verificado
+// pelo scheduler, não é só cosmético na tela. "Verificar agora" continua
+// funcionando em concorrente pausado de propósito (fluxo de recuperação já
+// existente desde a Etapa 5: se der certo, reativa sozinho).
+export async function updateCompetitorStatusAction(
+  competitorId: string,
+  newStatus: "ativo" | "pausado"
+): Promise<UpdateCompetitorState> {
+  const profile = await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
+  if (!competitor || competitor.account_id !== profile.account_id) {
+    return { error: "Concorrente não encontrado ou não pertence à sua conta" };
+  }
+
+  const { error } = await supabase.from("competitors").update({ status: newStatus }).eq("id", competitorId);
+  if (error) return { error: `Falha ao atualizar status: ${error.message}` };
+
+  revalidatePath("/admin/competitors");
+  return { success: true };
+}
+
+// Muda o intervalo de checagem. getDueCompetitors() lê polling_interval_minutes
+// direto do banco a cada execução (sem cache) — a mudança vale a partir do
+// próximo tick do scheduler, sem precisar reiniciar nada.
+export async function updateCompetitorIntervalAction(competitorId: string, minutes: number): Promise<UpdateCompetitorState> {
+  const profile = await requireRole("admin");
+  if (!ALLOWED_POLLING_INTERVALS.includes(minutes as (typeof ALLOWED_POLLING_INTERVALS)[number])) {
+    return { error: `Intervalo precisa ser um dos valores permitidos: ${ALLOWED_POLLING_INTERVALS.join(", ")} min` };
+  }
+
+  const supabase = await createClient();
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
+  if (!competitor || competitor.account_id !== profile.account_id) {
+    return { error: "Concorrente não encontrado ou não pertence à sua conta" };
+  }
+
+  const { error } = await supabase.from("competitors").update({ polling_interval_minutes: minutes }).eq("id", competitorId);
+  if (error) return { error: `Falha ao atualizar intervalo: ${error.message}` };
 
   revalidatePath("/admin/competitors");
   return { success: true };

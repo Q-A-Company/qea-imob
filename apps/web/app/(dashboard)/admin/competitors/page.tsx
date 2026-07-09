@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { CheckNowButton } from "./check-now-button";
 import { RegisterCompetitorForm } from "./register-form";
+import { StatusToggle } from "./status-toggle";
+import { IntervalSelect } from "./interval-select";
 
 const STATUS_LABEL: Record<string, string> = {
   ativo: "Ativo",
@@ -66,10 +68,13 @@ export default async function CompetitorsPage() {
                   </span>
                   {" · "}
                   Último check: {formatDateTime(competitor.last_checked_at)}
-                  {" · "}a cada {competitor.polling_interval_minutes} min
                 </p>
               </div>
-              <CheckNowButton competitorId={competitor.id} />
+              <div className="flex shrink-0 items-start gap-2">
+                <IntervalSelect competitorId={competitor.id} minutes={competitor.polling_interval_minutes} />
+                <StatusToggle competitorId={competitor.id} status={competitor.status} />
+                <CheckNowButton competitorId={competitor.id} />
+              </div>
             </li>
           ))}
         </ul>

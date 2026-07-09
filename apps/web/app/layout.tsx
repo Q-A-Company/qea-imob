@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, IBM_Plex_Mono, Fraunces } from "next/font/google";
-import Script from "next/script";
+import { cookies } from "next/headers";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -30,48 +30,32 @@ export const metadata: Metadata = {
   description: "Monitoramento de preços de concorrentes imobiliários",
 };
 
-// Script síncrono e bloqueante, roda antes do primeiro paint — evita flash
-// do tema errado. React 19 avisa/desaconselha <script> bruto via JSX
-// ("scripts inside React components are never executed when rendering on
-// the client") — o jeito correto no Next.js é next/script com
-// strategy="beforeInteractive", que injeta no <head> gerado e GARANTE
-// execução antes da hidratação (diferente das outras estratégias do
-// next/script, que realmente adiam). Não precisa mais de <head> manual.
-//
-// Escuro é o padrão do produto, não o do sistema operacional — só cai pra
-// claro se o usuário já escolheu isso explicitamente antes (localStorage).
-const themeInitScript = `
-(function () {
-  try {
-    var stored = localStorage.getItem("theme");
-    var dark = stored ? stored === "dark" : true;
-    if (dark) document.documentElement.classList.add("dark");
-  } catch (e) {}
-})();
-`;
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Tema decidido no servidor via cookie, não por script bloqueante no
+  // cliente — duas tentativas de script anti-flash (raw <script>, depois
+  // next/script beforeInteractive) esbarraram no mesmo warning do React 19
+  // ("scripts inside React components are never executed when rendering on
+  // the client"), apesar de seguir o padrão documentado do Next.js à risca
+  // nas duas vezes. Em vez de insistir num terceiro script, elimina a causa:
+  // sem <script> nenhum na árvore, servidor e cliente renderizam a mesma
+  // classe desde o primeiro paint, sem flash e sem mismatch de hidratação
+  // (não precisa mais de suppressHydrationWarning).
+  //
+  // Escuro é o padrão do produto — só cai pra claro se o cookie disser
+  // "light" explicitamente (usuário já trocou antes, ver theme-toggle.tsx).
+  const cookieStore = await cookies();
+  const isDark = cookieStore.get("theme")?.value !== "light";
+
   return (
     <html
       lang="pt-BR"
-      className={`${manrope.variable} ${plexMono.variable} ${fraunces.variable} h-full antialiased`}
-      // O script acima muda a classe do <html> antes do React hidratar —
-      // sem isso, React vê o mismatch (SSR não tem "dark", DOM real tem) e
-      // acusa erro de hidratação (aparecia como badge "1 Issue" no dev).
-      // É exatamente o padrão documentado pelo Next.js/next-themes pra
-      // scripts anti-flash de tema.
-      suppressHydrationWarning
+      className={`${manrope.variable} ${plexMono.variable} ${fraunces.variable} h-full antialiased ${isDark ? "dark" : ""}`}
     >
-      <body className="min-h-full flex flex-col">
-        <Script id="theme-init" strategy="beforeInteractive">
-          {themeInitScript}
-        </Script>
-        {children}
-      </body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

@@ -84,6 +84,16 @@ A prévia de extração mostrada ao Admin precisa exibir explicitamente **"X de 
 
 Minha primeira versão deste fluxo (2026-07-10) ativava direto no mesmo submit, sem revisão — decisão consciente na hora, mas que eu só documentei em comentário/README em vez de perguntar antes de implementar, apesar de ser exatamente o requisito de segurança que este parágrafo já registrava desde a Etapa 3. Corrigido a pedido do usuário depois de ele apontar isso, citando evidência concreta já vista neste projeto (Débora 0%, CEW 3,7% de cobertura) — o risco de ativar um `site_config` ruim sem revisão não era hipotético.
 
+## Gestão de concorrentes já cadastrados: pausar/retomar e editar intervalo
+
+`apps/web/app/(dashboard)/admin/competitors/status-toggle.tsx` e `interval-select.tsx` — controles inline na listagem, além do que já existia só no cadastro inicial.
+
+**Pausar/retomar não é cosmético**: confirmado lendo `packages/scraper/jobs/scheduler.ts` antes de construir o botão (não assumido) — `getDueCompetitors()` já filtra `.eq("status", "ativo")` desde a Etapa 5, então um concorrente `'pausado'` nunca é retornado, nunca é passado pra `checkCompetitor()`. O botão só expõe uma mutação que já tinha efeito real no scheduler. "Verificar agora" continua funcionando propositalmente em concorrente pausado — é o fluxo de recuperação da Etapa 5 (se der certo, reativa sozinho).
+
+**Intervalo editável, só 4 opções fixas** (5/10/30/60 min) — `ALLOWED_POLLING_INTERVALS` em `apps/web/lib/competitors/actions.ts`, validado tanto em `updateCompetitorIntervalAction` quanto em `registerCompetitorAction` (o cadastro inicial usava número livre antes, corrigido pro mesmo `<select>`). Nenhuma migration nova: `getDueCompetitors()` já lê `polling_interval_minutes` direto do banco a cada execução, sem cache, então a mudança vale a partir do próximo tick do scheduler automaticamente.
+
+**Validado** (script de validação descartado depois de usar): concorrente sintético com `last_checked_at` controlado manualmente, isolando cada variável — devido com intervalo de 5min/checado há 10min ✅; **não** devido enquanto pausado (mesmo cenário, só o status muda) ✅; devido de novo ao retomar ✅; **não** devido depois de aumentar o intervalo pra 60min (mesmo `last_checked_at`) ✅; devido de novo ao voltar pra 5min, sem reiniciar nada ✅.
+
 Validado com IA real (script de validação descartado depois de usar, a pedido do usuário — não fica como regressão neste repo): `pendente_revisao` logo após aprender, confirmar vira `ativo` com `last_validated_at` preenchido, descartar apaga concorrente e `site_config` via cascade.
 
 ## imobiliariaveleiros.com.br: resolvido via json_api (POST + offset)

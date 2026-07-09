@@ -7,6 +7,7 @@ import {
   discardSiteConfigAction,
   type RegisterCompetitorState,
 } from "@/lib/competitors/actions";
+import { ALLOWED_POLLING_INTERVALS } from "@/lib/competitors/constants";
 
 const initialState: RegisterCompetitorState = {};
 
@@ -142,17 +143,15 @@ export function RegisterCompetitorForm() {
 
         <div className="flex flex-col gap-1">
           <label htmlFor="pollingIntervalMinutes" className="text-xs font-medium text-muted">
-            Intervalo (min)
+            Intervalo
           </label>
-          <input
-            id="pollingIntervalMinutes"
-            name="pollingIntervalMinutes"
-            type="number"
-            min={1}
-            defaultValue={5}
-            required
-            className={`${inputClass} w-20`}
-          />
+          <select id="pollingIntervalMinutes" name="pollingIntervalMinutes" defaultValue={5} required className={inputClass}>
+            {ALLOWED_POLLING_INTERVALS.map((m) => (
+              <option key={m} value={m}>
+                {m} min
+              </option>
+            ))}
+          </select>
         </div>
 
         <button
