@@ -3,8 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "index.ts",
+  "exports": {
+    "./*": "./dist/*.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
   "dependencies": {
-    "cheerio": "^1.0.0"
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "cheerio": "^1.0.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "^5"
   }
 }
