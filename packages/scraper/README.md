@@ -48,6 +48,23 @@ Rodando `generateSiteConfig` três vezes seguidas contra o mesmo HTML de `cutrim
 
 Validado: 3 rodadas consecutivas pós-hardening do prompt voltaram todas com `external_id` via `href` (estável) e `sanityOk: true`. O caso ruim foi reproduzido deliberadamente em `scripts/test-sanity-unit.ts` para provar que a rede de segurança em código pega o problema mesmo se o prompt falhar.
 
+### ⚠️ Pré-requisito obrigatório antes da Etapa 7: falso positivo em `checkExternalIdSanity`
+
+**Não é "nice to have" — é bloqueante.** Descoberto em 2026-07-09 ao semear `mullerimoveis.com.br` como concorrente de demonstração (fora de um teste automatizado, em uso real): `checkExternalIdSanity` rebaixou `confidence_score` para `0.2` mesmo com um `site_config` correto.
+
+Causa: a checagem em `ai/site-config-compatibility.ts` (linha ~27) rejeita sempre que `external_id.attribute === "text" && price.attribute === "text"` — **mesmo quando os seletores CSS são completamente diferentes**. No caso real:
+
+```
+external_id: { selector: ".imovelcard__info__ref strong", attribute: "text" }  // "Ref: XXXX", estável
+price:       { selector: ".imovelcard__valor__valor", attribute: "text" }       // preço, seletor distinto
+```
+
+Isso é o mesmo padrão de `external_id` já validado com 61/61 (100%) na Etapa 4 — não é o bug real que a checagem foi desenhada para pegar (`external_id` acidentalmente igual ao `price`, ou capturando título/preço junto). A heurística testa "os dois campos usam texto livre?" quando deveria testar "os dois campos vêm do **mesmo** seletor (ou se sobrepõem)?" — `attribute === "text"` sozinho não indica sobreposição, é o jeito normal de extrair tanto referência quanto preço na maioria dos sites.
+
+**Por que isso bloqueia a Etapa 7, não é só um incômodo cosmético**: a Etapa 7 (self-healing) vai usar exatamente esse sinal para decidir se recalibra via IA automaticamente. Um falso positivo faz `confidence_score` cair para `0.2` num `site_config` perfeitamente funcional — se a Etapa 7 usar esse `confidence_score` (ou o próprio `sanityOk: false`) como gatilho de recalibração, ela vai disparar chamadas de IA desnecessárias em produção para configs que não têm nada de errado. Custo real, recorrente, silencioso.
+
+**Antes de implementar a Etapa 7**: revisar `checkExternalIdSanity` em `ai/site-config-compatibility.ts` para detectar sobreposição real (mesmo seletor, ou um seletor sendo ancestral/descendente do outro no DOM, ou o valor extraído de fato conter o preço) em vez do proxy grosseiro atual (`attribute === "text"` nos dois). Atualizar `scripts/test-sanity-unit.ts` com este caso real (`mullerimoveis`) como regressão — hoje ele só cobre o caso de sobreposição verdadeira (`cutrimimobiliaria`), não o de falso positivo.
+
 ## Requisito para as Etapas 5/6/7 (scheduler, comparação, self-healing — ainda não implementadas): `stoppedEarlyDueToError`
 
 `run-price-check.ts` (Etapa 4) retorna `stoppedEarlyDueToError: boolean` — true quando a extração parou por falha de rede/servidor (após esgotar retries), não por chegar ao fim legítimo da paginação. `scraper_runs.stopped_early_due_to_error` (migration `0004`) existe especificamente pra carregar esse sinal até o banco. Contrato obrigatório para quem implementar as próximas etapas:
