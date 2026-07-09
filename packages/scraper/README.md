@@ -76,9 +76,15 @@ Regressão adicionada em `scripts/test-sanity-unit.ts`: o caso real do `mullerim
 3. **Etapa 7 (self-healing)**: `stopped_early_due_to_error` **não** deve, sozinho, disparar recalibração via IA. O gatilho de recalibração (`site_configs.status = 'degradado'`) é especificamente para quando a extração respondeu por completo mas capturou 0 imóveis ou a maioria sem preço — isso indica seletor obsoleto. Uma falha de rede não diz nada sobre se os seletores ainda estão corretos; recalibrar nesse caso desperdiçaria uma chamada de IA sem corrigir nada.
 4. **`scraper_runs`**: toda chamada de `run-price-check.ts` deve gravar uma linha em `scraper_runs` com `stopped_early_due_to_error` fiel ao que o job retornou — não é opcional, é o registro de auditoria que Etapas 5/6/7 e o painel SuperAdmin (Etapa 12) dependem para funcionar corretamente.
 
-## Requisito para a Etapa 10 (telas de admin — ainda não implementado)
+## Requisito da Etapa 10 (telas de admin) — atendido
 
-A prévia de extração mostrada ao Admin antes de ativar um concorrente precisa exibir explicitamente **"X de Y imóveis capturados (Z%)"** — não só a lista de itens da amostra. `Y` vem de `total_listings_hint` (estratégia `html_css`) ou do campo de total confirmado (estratégia `json_api`); quando `Y` for desconhecido, mostrar isso como tal ("total desconhecido"), não omitir.
+A prévia de extração mostrada ao Admin precisa exibir explicitamente **"X de Y imóveis capturados (Z%)"** — não só a lista de itens da amostra. `Y` vem de `total_listings_hint` (estratégia `html_css`) ou do campo de total confirmado (estratégia `json_api`); quando `Y` for desconhecido, mostrar isso como tal ("total desconhecido"), não omitir.
+
+**Fluxo de confirmação em duas telas** (`apps/web/lib/competitors/actions.ts` + `apps/web/app/(dashboard)/admin/competitors/register-form.tsx`): `registerCompetitorAction` cadastra o concorrente e roda `learnSiteConfig` no mesmo submit, mas salva o `site_config` com `status = 'pendente_revisao'` — **não ativa sozinho**. A tela mostra cobertura ("X de Y"), confiança e warnings; o Admin decide `confirmSiteConfigAction` (vira `'ativo'`) ou `discardSiteConfigAction` (apaga concorrente + config, cascade). `check-competitor.ts` já só considera `site_configs` com `status = 'ativo'`, então `pendente_revisao` fica automaticamente de fora das checagens sem precisar de nenhuma mudança ali — reaproveita o mesmo status já criado na Etapa 3/usado na Etapa 7, sem migration nova.
+
+Minha primeira versão deste fluxo (2026-07-10) ativava direto no mesmo submit, sem revisão — decisão consciente na hora, mas que eu só documentei em comentário/README em vez de perguntar antes de implementar, apesar de ser exatamente o requisito de segurança que este parágrafo já registrava desde a Etapa 3. Corrigido a pedido do usuário depois de ele apontar isso, citando evidência concreta já vista neste projeto (Débora 0%, CEW 3,7% de cobertura) — o risco de ativar um `site_config` ruim sem revisão não era hipotético.
+
+Validado com IA real (script de validação descartado depois de usar, a pedido do usuário — não fica como regressão neste repo): `pendente_revisao` logo após aprender, confirmar vira `ativo` com `last_validated_at` preenchido, descartar apaga concorrente e `site_config` via cascade.
 
 ## imobiliariaveleiros.com.br: resolvido via json_api (POST + offset)
 
