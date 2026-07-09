@@ -29,7 +29,18 @@ function KpiCard({ label, value, delay, hero }: { label: string; value: number; 
   );
 }
 
-export function DashboardClient({ data, fullName }: { data: DashboardData; fullName: string | null }) {
+// canManage=false pra role Usuario (Etapa 11) — dashboard em si é
+// só-leitura pros dois roles, então a única diferença de verdade é o CTA do
+// estado vazio (ver empty-state.tsx).
+export function DashboardClient({
+  data,
+  fullName,
+  canManage = true,
+}: {
+  data: DashboardData;
+  fullName: string | null;
+  canManage?: boolean;
+}) {
   const reduceMotion = useReducedMotion();
   const [greeting, setGreeting] = useState<string | null>(null);
 
@@ -65,7 +76,7 @@ export function DashboardClient({ data, fullName }: { data: DashboardData; fullN
 
       {!data.hasCompetitors ? (
         <motion.div variants={item}>
-          <EmptyState />
+          <EmptyState canManage={canManage} />
         </motion.div>
       ) : (
         <>

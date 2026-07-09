@@ -11,9 +11,13 @@ const inputClass =
 export function ReportFiltersForm({
   competitors,
   filters,
+  basePath,
 }: {
   competitors: { id: string; name: string; abbreviation: string }[];
   filters: ReportFilters;
+  // /admin/relatorios ou /user/relatorios (Etapa 11) — o formulário navega
+  // internamente ao submeter/limpar, precisa saber pra qual rota voltar.
+  basePath: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,7 +82,7 @@ export function ReportFiltersForm({
     }
     params.delete("page"); // qualquer mudança de filtro volta pra página 1
 
-    router.push(`/admin/relatorios?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   function clearDateRange() {
@@ -87,11 +91,11 @@ export function ReportFiltersForm({
   }
 
   // Reseta o estado local diretamente, em vez de só navegar — navegar
-  // sozinho (Link pra /admin/relatorios) só resetava os campos QUANDO a URL
-  // já tinha parâmetros aplicados (ex: depois de um "Aplicar filtros"). Se o
-  // usuário só mexeu nos campos sem nunca ter submetido, a URL já era
-  // /admin/relatorios sem parâmetros — nada mudava, e os campos em edição
-  // ficavam intocados. Resetando o state aqui, funciona nos dois casos.
+  // sozinho (Link pra basePath) só resetava os campos QUANDO a URL já tinha
+  // parâmetros aplicados (ex: depois de um "Aplicar filtros"). Se o usuário
+  // só mexeu nos campos sem nunca ter submetido, a URL já era basePath sem
+  // parâmetros — nada mudava, e os campos em edição ficavam intocados.
+  // Resetando o state aqui, funciona nos dois casos.
   function handleClear() {
     const defaults = defaultDateRange();
     setSelectedCompetitors(null);
@@ -103,7 +107,7 @@ export function ReportFiltersForm({
     setMinVariationUnit("reais");
     setStatus("ambos");
     setSearch("");
-    router.push("/admin/relatorios");
+    router.push(basePath);
   }
 
   const allSelected = selectedCompetitors === null;

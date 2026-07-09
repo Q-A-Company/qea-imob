@@ -1,21 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Cria um usuário Admin vinculado à conta demo (mesmo processo usado para o
-// primeiro SuperAdmin: supabase.auth.admin.createUser com user_metadata,
-// o trigger on_auth_user_created cuida de criar o profile — ver
-// supabase/migrations/0001_init.sql e supabase/seed.sql).
+// Cria um usuário (Admin ou Usuario) vinculado à conta demo — mesmo
+// processo usado para o primeiro SuperAdmin: supabase.auth.admin.createUser
+// com user_metadata, o trigger on_auth_user_created cuida de criar o
+// profile (ver supabase/migrations/0001_init.sql e supabase/seed.sql).
 //
 // Uso:
-//   node --env-file=apps/web/.env.local --import tsx scripts/create-admin.mjs <email> <senha> "<nome completo>"
+//   node --env-file=apps/web/.env.local --import tsx scripts/create-admin.mjs <email> <senha> "<nome completo>" [role]
+//   role: "admin" (default) ou "usuario"
 //
 // Rode uma vez para criar o usuário; depois pode apagar este script.
 
 const DEMO_ACCOUNT_ID = "00000000-0000-0000-0000-000000000001";
 
-const [, , email, password, fullName] = process.argv;
+const [, , email, password, fullName, roleArg] = process.argv;
+const role = roleArg === "usuario" ? "usuario" : "admin";
 
 if (!email || !password) {
-  console.error('Uso: node --env-file=apps/web/.env.local --import tsx scripts/create-admin.mjs <email> <senha> "<nome completo>"');
+  console.error(
+    'Uso: node --env-file=apps/web/.env.local --import tsx scripts/create-admin.mjs <email> <senha> "<nome completo>" [admin|usuario]'
+  );
   process.exit(1);
 }
 
@@ -32,15 +36,15 @@ const { data, error } = await supabase.auth.admin.createUser({
   password,
   email_confirm: true,
   user_metadata: {
-    role: "admin",
+    role,
     account_id: DEMO_ACCOUNT_ID,
-    full_name: fullName ?? "Admin Demo",
+    full_name: fullName ?? (role === "usuario" ? "Usuario Demo" : "Admin Demo"),
   },
 });
 
 if (error) throw error;
 
-console.log("Usuário Admin criado:", { id: data.user.id, email: data.user.email });
+console.log(`Usuário ${role} criado:`, { id: data.user.id, email: data.user.email });
 
 const { data: profile, error: profileError } = await supabase
   .from("profiles")

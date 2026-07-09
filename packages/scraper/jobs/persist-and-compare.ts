@@ -38,22 +38,46 @@ export interface DetectedChange {
 // schema até permitiria (old_price nullable), mas "comparação com cache"
 // pressupõe uma entrada anterior pra comparar; sem isso não há mudança,
 // só uma captura nova. Registrado no README para poder ser revisto.
+const FETCH_PAGE_SIZE = 1000;
+
+// O PostgREST devolve no máximo ~1000 linhas por resposta por padrão,
+// silenciosamente — sem erro, sem aviso, só corta. Um .select() sem
+// paginação explícita parece "buscar tudo" mas não busca, a partir de mil
+// linhas. Reproduzido contra dados reais (Sentineli & Sobral, 1409
+// properties): a query "buscar todas as properties existentes" devolvia só
+// 1000 de 1408 — o mapa de "isso já existe?" ficava incompleto, imóveis
+// reais eram tratados como novos, e o INSERT batia na constraint única
+// (competitor_id, external_id) na segunda checagem em diante. Não
+// acontecia com concorrentes pequenos (Muller, 61 properties) por nunca
+// cruzar o limite. Paginação explícita aqui é a correção da causa raiz —
+// não é otimização prematura, é a diferença entre "buscar tudo" de
+// verdade ou não.
+async function fetchAllExistingProperties(supabase: SupabaseClient, competitorId: string): Promise<PropertyRow[]> {
+  const all: PropertyRow[] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("id, external_id, current_price, price_status, status")
+      .eq("competitor_id", competitorId)
+      .range(offset, offset + FETCH_PAGE_SIZE - 1);
+    if (error) throw new Error(`Falha ao buscar properties existentes: ${error.message}`);
+    all.push(...((data ?? []) as PropertyRow[]));
+    if (!data || data.length < FETCH_PAGE_SIZE) break;
+    offset += FETCH_PAGE_SIZE;
+  }
+  return all;
+}
+
 export async function persistAndDetectChanges(
   supabase: SupabaseClient,
   competitorId: string,
   capturedProperties: ExtractedProperty[],
   options: { stoppedEarlyDueToError: boolean }
 ): Promise<{ changesDetected: number; changes: DetectedChange[] }> {
-  const { data: existingRows, error: fetchError } = await supabase
-    .from("properties")
-    .select("id, external_id, current_price, price_status, status")
-    .eq("competitor_id", competitorId);
+  const existingRows = await fetchAllExistingProperties(supabase, competitorId);
 
-  if (fetchError) throw new Error(`Falha ao buscar properties existentes: ${fetchError.message}`);
-
-  const existingByExternalId = new Map<string, PropertyRow>(
-    ((existingRows ?? []) as PropertyRow[]).map((row) => [row.external_id, row])
-  );
+  const existingByExternalId = new Map<string, PropertyRow>(existingRows.map((row) => [row.external_id, row]));
   const capturedExternalIds = new Set(capturedProperties.map((p) => p.external_id));
   const now = new Date().toISOString();
 
@@ -149,7 +173,14 @@ export async function persistAndDetectChanges(
   }
 
   if (toInsert.length > 0) {
-    const { error: insertError } = await supabase.from("properties").insert(toInsert);
+    // upsert, não insert puro — rede de segurança ADICIONAL à paginação
+    // acima (que já corrige a causa raiz), não um substituto dela: mesmo
+    // com a busca completa, upsert evita que qualquer outra causa futura
+    // de "achei que era novo mas já existia" vire um 500 pro usuário em vez
+    // de simplesmente atualizar a linha que já existe.
+    const { error: insertError } = await supabase
+      .from("properties")
+      .upsert(toInsert, { onConflict: "competitor_id,external_id" });
     if (insertError) throw new Error(`Falha ao inserir novas properties: ${insertError.message}`);
   }
 

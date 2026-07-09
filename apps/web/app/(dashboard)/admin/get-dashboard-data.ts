@@ -42,6 +42,39 @@ export interface DashboardData {
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const FETCH_PAGE_SIZE = 1000;
+
+interface PropertyRef {
+  id: string;
+  external_id: string;
+  competitor_id: string;
+}
+
+// O PostgREST devolve no máximo ~1000 linhas por resposta por padrão,
+// silenciosamente (sem erro) — um .select() sem paginação explícita não
+// "busca tudo" a partir de mil linhas. Reproduzido contra dados reais
+// (Sentineli & Sobral, 1408 properties): essa query devolvia só 1000,
+// derrubando ~408 imóveis do feed/breakdown sem nenhum aviso (mesma causa
+// raiz do bug de duplicate key corrigido em persist-and-compare.ts).
+async function fetchAllProperties(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  competitorIds: string[]
+): Promise<PropertyRef[]> {
+  const all: PropertyRef[] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("id, external_id, competitor_id")
+      .in("competitor_id", competitorIds)
+      .range(offset, offset + FETCH_PAGE_SIZE - 1);
+    if (error) throw new Error(`Falha ao buscar imóveis: ${error.message}`);
+    all.push(...(data ?? []));
+    if (!data || data.length < FETCH_PAGE_SIZE) break;
+    offset += FETCH_PAGE_SIZE;
+  }
+  return all;
+}
 
 const EMPTY_DASHBOARD_DATA: Omit<DashboardData, "hasCompetitors" | "activeCompetitorsCount" | "dailyVolumes"> = {
   changes1h: 0,
@@ -77,24 +110,27 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
   const competitorMeta = new Map((competitors ?? []).map((c) => [c.id, { name: c.name, abbreviation: c.abbreviation }]));
   const competitorIds = (competitors ?? []).map((c) => c.id);
 
-  const { data: properties, error: propertiesError } = await supabase
-    .from("properties")
-    .select("id, external_id, competitor_id")
-    .in("competitor_id", competitorIds);
-  if (propertiesError) throw new Error(`Falha ao buscar imóveis: ${propertiesError.message}`);
+  const properties = await fetchAllProperties(supabase, competitorIds);
 
-  const propertyById = new Map((properties ?? []).map((p) => [p.id, p]));
-  const propertyIds = (properties ?? []).map((p) => p.id);
+  const propertyById = new Map(properties.map((p) => [p.id, p]));
+  const propertyIds = properties.map((p) => p.id);
 
   if (propertyIds.length === 0) {
     return { hasCompetitors: true, activeCompetitorsCount, dailyVolumes: emptyDailyVolumes, ...EMPTY_DASHBOARD_DATA };
   }
 
+  // Sem .in("property_id", propertyIds) de propósito — com um concorrente
+  // grande (json_api, centenas/milhares de imóveis), essa lista vira uma
+  // URL gigante e o Supabase rejeita com 400 antes de processar (bug real,
+  // reproduzido com Sentineli & Sobral, 1000 properties). A policy RLS
+  // "account_members_select" em property_changes já escopa por conta via
+  // property_id → properties → competitors → account_id no próprio banco
+  // (ver supabase/migrations/0001_init.sql) — reimplementar esse filtro no
+  // cliente era redundante E foi exatamente a redundância que quebrou.
   const sinceIso = new Date(Date.now() - SEVEN_DAYS_MS).toISOString();
   const { data: changes, error: changesError } = await supabase
     .from("property_changes")
     .select("id, property_id, old_price, new_price, old_status, new_status, detected_at")
-    .in("property_id", propertyIds)
     .gte("detected_at", sinceIso)
     .order("detected_at", { ascending: false });
   if (changesError) throw new Error(`Falha ao buscar mudanças: ${changesError.message}`);

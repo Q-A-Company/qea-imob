@@ -74,19 +74,21 @@ interface NavItem {
   roles: UserRole[];
 }
 
-// Concorrentes/Histórico/Configurações são funções de gestão — escopo
-// explícito da Etapa 10 (telas de Admin). A Etapa 11 (tela de Usuario,
-// read-only) ainda não existe, então por decisão consciente esses 3 itens
-// ficam ocultos pra role 'usuario' por enquanto, em vez de linkar pra rotas
-// /admin/* que redirecionariam o usuário de volta (requireRole('admin')).
-// Painel e Notificações são dados de conta compartilhados, aparecem pros dois.
+// Concorrentes/Configurações são funções de gestão puras — sem versão
+// somente-leitura, ficam admin-only (Etapa 10). Painel/Notificações/
+// Histórico/Relatórios (Etapa 11) são as mesmas informações pros dois
+// roles, só que em rotas /admin/* ou /user/* separadas — ver o trade-off
+// registrado no README (rotas espelhadas, não uma rota só com `if` de
+// role: mantém /admin/* como invariante "só Admin entra", auditável sem
+// abrir cada página).
 function buildNavItems(role: UserRole): NavItem[] {
+  const base = role === "usuario" ? "/user" : "/admin";
   const items: NavItem[] = [
     { key: "painel", label: "Painel", icon: PulseIcon, href: ROLE_HOME[role], roles: ["admin", "usuario", "superadmin"] },
-    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: "/admin/notifications", roles: ["admin", "usuario"] },
-    { key: "historico", label: "Histórico", icon: ClockIcon, href: "/admin/history", roles: ["admin"] },
+    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: `${base}/notifications`, roles: ["admin", "usuario"] },
+    { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "usuario"] },
+    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "usuario"] },
     { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin"] },
-    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: "/admin/relatorios", roles: ["admin"] },
     { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin"] },
   ];
   return items.filter((item) => item.roles.includes(role));
