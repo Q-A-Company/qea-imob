@@ -9,6 +9,7 @@ export interface CheckCompetitorNowState {
   result?: {
     success: boolean;
     propertiesCaptured: number;
+    changesDetected: number;
     stoppedEarlyDueToError: boolean;
     pausedByCircuitBreaker: boolean;
     reactivatedAfterSuccess: boolean;
@@ -17,11 +18,12 @@ export interface CheckCompetitorNowState {
   error?: string;
 }
 
-// Dispara a mesma lógica de checagem de rotina (Etapa 4/5) sob demanda —
-// hoje roda dentro do processo do Next.js por simplicidade (não há worker
-// separado deployado ainda); numa implantação real, isso chamaria o worker
-// (Railway) em vez de importar packages/scraper diretamente. Ver
-// apps/web/next.config.ts (transpilePackages).
+// Dispara a mesma lógica de checagem de rotina (Etapa 4/5) + comparação
+// (Etapa 6) sob demanda — hoje roda dentro do processo do Next.js por
+// simplicidade (não há worker separado deployado ainda); numa implantação
+// real, isso chamaria o worker (Railway) em vez de importar
+// packages/scraper diretamente. packages/scraper é pré-compilado para
+// dist/ antes do build/dev (ver package.json "exports" e prebuild/predev).
 export async function checkCompetitorNowAction(
   _prevState: CheckCompetitorNowState,
   formData: FormData
@@ -55,6 +57,7 @@ export async function checkCompetitorNowAction(
       result: {
         success: result.success,
         propertiesCaptured: result.propertiesCaptured,
+        changesDetected: result.changesDetected,
         stoppedEarlyDueToError: result.stoppedEarlyDueToError,
         pausedByCircuitBreaker: result.pausedByCircuitBreaker,
         reactivatedAfterSuccess: result.reactivatedAfterSuccess,

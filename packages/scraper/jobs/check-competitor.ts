@@ -1,5 +1,6 @@
 import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { runPriceCheck } from "./run-price-check.js";
+import { persistAndDetectChanges } from "./persist-and-compare.js";
 import type { ExtractedProperty } from "../core/types.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -14,6 +15,7 @@ export interface CheckCompetitorResult {
   competitorId: string;
   success: boolean;
   propertiesCaptured: number;
+  changesDetected: number;
   stoppedEarlyDueToError: boolean;
   pausedByCircuitBreaker: boolean;
   reactivatedAfterSuccess: boolean;
@@ -49,8 +51,12 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
 //   - Falhas de rede consecutivas (não seletores obsoletos) pausam o
 //     concorrente e notificam a conta — circuit breaker separado do
 //     gatilho de recalibração via IA (que não existe ainda, Etapa 7).
-//   - NÃO faz nenhuma inferência de "imóvel sumiu = vendido" — isso é
-//     Etapa 6, que ainda não existe; changes_detected fica sempre 0 aqui.
+//   - Persiste a captura em `properties` e compara com o que já estava
+//     salvo (persist-and-compare.ts, Etapa 6) — gera `property_changes`
+//     para preço/price_status alterado e para disponibilidade
+//     (ativo ↔ possivelmente_vendido). A inferência de "sumiu da
+//     listagem = possivelmente_vendido" só roda quando
+//     stopped_early_due_to_error = false (ver contrato no README).
 export async function checkCompetitor(competitorId: string): Promise<CheckCompetitorResult> {
   const supabase = createServiceClient();
 
@@ -87,6 +93,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       competitorId,
       success: false,
       propertiesCaptured: 0,
+      changesDetected: 0,
       stoppedEarlyDueToError: false,
       pausedByCircuitBreaker: false,
       reactivatedAfterSuccess: false,
@@ -109,6 +116,14 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   // sumiram de verdade ou só não foram alcançados.
   const stoppedEarlyDueToError = result?.stoppedEarlyDueToError ?? true;
   const success = result !== null;
+
+  // Só compara/persiste quando a extração de fato rodou (mesmo que parcial
+  // — os imóveis que FORAM capturados continuam válidos pra comparação; só
+  // a inferência por ausência fica bloqueada dentro de persistAndDetectChanges
+  // quando stoppedEarlyDueToError). Falha total não tem o que persistir.
+  const { changesDetected } = result
+    ? await persistAndDetectChanges(supabase, competitorId, result.properties, { stoppedEarlyDueToError })
+    : { changesDetected: 0 };
 
   let pausedByCircuitBreaker = false;
   let reactivatedAfterSuccess = false;
@@ -139,7 +154,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     run_type: "checagem",
     success,
     properties_captured: propertiesCaptured,
-    changes_detected: 0,
+    changes_detected: changesDetected,
     error_message: totalFailureMessage,
     stopped_early_due_to_error: stoppedEarlyDueToError,
   });
@@ -150,6 +165,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     competitorId,
     success,
     propertiesCaptured,
+    changesDetected,
     stoppedEarlyDueToError,
     pausedByCircuitBreaker,
     reactivatedAfterSuccess,

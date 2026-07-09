@@ -124,3 +124,20 @@ Escopo desta etapa é só "preparar o terreno" (decisão explícita, 2026-07-09)
 `apps/web` importa `packages/scraper` via subpath (`scraper/jobs/check-competitor`). O código-fonte usa a convenção `moduleResolution: NodeNext`, onde imports relativos declaram extensão `.js` mesmo apontando para arquivos `.ts` (`from "../core/db.js"`) — é assim que o `tsc` espera que fiquem depois de compilado. Isso funciona direto com `tsx`/`node --import tsx` (usado nos scripts de validação), mas o Turbopack do Next.js **não** faz esse remapeamento de `.js` → `.ts` para pacotes de workspace: tentar importar o `.ts` cru direto (mesmo com `transpilePackages`) falha com `Module not found` nos imports internos do pacote.
 
 **Fix (não é gambiarra, é o uso pretendido do padrão NodeNext)**: `packages/scraper` agora tem seu próprio `tsconfig.json` com `outDir: dist` e um `package.json` com `"exports": { "./*": "./dist/*.js" }` — compila para JS de verdade antes de ser consumido. `apps/web/package.json` tem `predev`/`prebuild` que rodam `npm run build --workspace=scraper` automaticamente antes de `next dev`/`next build`. Confirmado com `npm run build` completo em `apps/web` (compila `scraper` → `dist/`, depois `next build` resolve tudo, rotas `/admin/competitors` etc. geradas sem erro).
+
+## Etapa 6: comparação com cache + `property_changes`
+
+`jobs/persist-and-compare.ts` (`persistAndDetectChanges`) — chamado por `check-competitor.ts` logo depois de uma captura bem-sucedida (mesmo parcial). Persiste o resultado em `properties` e compara com o que já estava salvo. Duas dimensões de mudança, cada uma pode gerar sua própria linha em `property_changes`:
+
+1. **Preço/`price_status` mudou** num imóvel já conhecido (`external_id` já existia) — `old_price`/`new_price` preenchidos, `old_status`/`new_status = null`.
+2. **Disponibilidade mudou** — imóvel sumiu da listagem (`ativo` → `possivelmente_vendido`) ou reapareceu (`possivelmente_vendido` → `ativo`) — `old_status`/`new_status` preenchidos, `old_price`/`new_price` = preço atual (sem mudança nesse evento).
+
+**Decisão de escopo**: imóvel novo (`external_id` nunca visto antes) só é inserido em `properties` — **não** gera `property_changes`. O schema permitiria (`old_price` é nullable), mas "comparação com cache" pressupõe uma entrada anterior pra comparar; sem isso não há mudança, só uma captura nova. Revisável se o produto precisar notificar sobre concorrente adicionando imóvel novo.
+
+**Contrato de `stopped_early_due_to_error` (definido antes da Etapa 5, cumprido aqui)**: a inferência "sumiu da listagem = `possivelmente_vendido`" só roda quando `stoppedEarlyDueToError = false` na execução atual. Numa captura parcial, os imóveis que **foram** capturados continuam sendo comparados/atualizados normalmente (preço, `last_seen_at`) — só a inferência por *ausência* fica bloqueada, porque não dá pra saber se os imóveis faltantes sumiram de verdade ou só não foram alcançados por causa do erro de rede.
+
+**Validado**:
+- `scripts/test-etapa6-persist-and-compare.ts`: 5 passos determinísticos contra um concorrente sintético isolado (chamando `persistAndDetectChanges` diretamente, sem depender de scraping real) — captura inicial (0 mudanças), mudança de preço (1), imóvel some com execução completa (1, vira `possivelmente_vendido`), imóvel continua ausente mas execução **parcial** (0 — confirma que o gate `stoppedEarlyDueToError` bloqueia a inferência), imóvel reaparece (1, volta a `ativo`). Todos os 5 passos bateram com o esperado.
+- Primeira captura real contra `mullerimoveis.com.br` (conta demo): 61/61 imóveis inseridos em `properties`, `changesDetected: 0` (esperado — tudo novo, nada para comparar ainda).
+
+Não coberto ainda por este trabalho: notificação (sino/e-mail) quando `property_changes` é gerado — isso é Etapa 8/9. `persistAndDetectChanges` só grava o dado; nada consome `property_changes` além do contador `changes_detected` em `scraper_runs`.

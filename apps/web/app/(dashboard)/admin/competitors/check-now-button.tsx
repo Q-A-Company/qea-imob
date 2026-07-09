@@ -34,7 +34,7 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
           }`}
         >
           {state.result.success
-            ? `${state.result.propertiesCaptured} imóveis capturados${
+            ? `${state.result.propertiesCaptured} imóveis capturados · ${state.result.changesDetected} mudança(s) detectada(s)${
                 state.result.stoppedEarlyDueToError ? " (parou cedo por erro)" : ""
               }${state.result.pausedByCircuitBreaker ? " · pausado automaticamente" : ""}${
                 state.result.reactivatedAfterSuccess ? " · reativado" : ""
