@@ -11,6 +11,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // packages/scraper/README.md.
 const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 
+// Gatilho de recalibração (Etapa 7): extração COMPLETA (não é falha de
+// rede) mas de qualidade ruim o suficiente para sugerir seletor obsoleto —
+// 0 imóveis capturados, ou a maioria sem preço.
+const DEGRADED_MIN_MISSING_PRICE_RATIO = 0.5;
+
 export interface CheckCompetitorResult {
   competitorId: string;
   success: boolean;
@@ -19,6 +24,7 @@ export interface CheckCompetitorResult {
   stoppedEarlyDueToError: boolean;
   pausedByCircuitBreaker: boolean;
   reactivatedAfterSuccess: boolean;
+  configMarkedDegraded: boolean;
   errorMessage: string | null;
   properties: ExtractedProperty[];
 }
@@ -57,6 +63,10 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
 //     (ativo ↔ possivelmente_vendido). A inferência de "sumiu da
 //     listagem = possivelmente_vendido" só roda quando
 //     stopped_early_due_to_error = false (ver contrato no README).
+//   - Extração completa mas de qualidade ruim (0 imóveis, ou maioria sem
+//     preço) marca o site_config como 'degradado' e notifica a conta —
+//     gatilho de recalibração via IA (recalibrate-site-config.ts, Etapa 7),
+//     desacoplado do circuit breaker de falha de rede acima.
 export async function checkCompetitor(competitorId: string): Promise<CheckCompetitorResult> {
   const supabase = createServiceClient();
 
@@ -97,6 +107,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       stoppedEarlyDueToError: false,
       pausedByCircuitBreaker: false,
       reactivatedAfterSuccess: false,
+      configMarkedDegraded: false,
       errorMessage: "Nenhum site_config ativo",
       properties: [],
     };
@@ -117,13 +128,37 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   const stoppedEarlyDueToError = result?.stoppedEarlyDueToError ?? true;
   const success = result !== null;
 
+  // Extração completou (não foi falha de rede) mas veio vazia ou majoritariamente
+  // sem preço — sinal de seletor obsoleto, não de catálogo esvaziado. Distinto
+  // de stoppedEarlyDueToError (que é sobre não CONSEGUIR extrair), mas tem o
+  // mesmo efeito prático sobre a confiabilidade dos dados desta execução.
+  const configLooksDegraded =
+    success &&
+    !stoppedEarlyDueToError &&
+    (propertiesCaptured === 0 || result!.cardsWithoutPrice / propertiesCaptured >= DEGRADED_MIN_MISSING_PRICE_RATIO);
+
   // Só compara/persiste quando a extração de fato rodou (mesmo que parcial
-  // — os imóveis que FORAM capturados continuam válidos pra comparação; só
-  // a inferência por ausência fica bloqueada dentro de persistAndDetectChanges
-  // quando stoppedEarlyDueToError). Falha total não tem o que persistir.
+  // — os imóveis que FORAM capturados continuam válidos pra comparação). A
+  // inferência por ausência ("sumiu = possivelmente_vendido") fica bloqueada
+  // dentro de persistAndDetectChanges tanto em falha de rede quanto em
+  // config degradado — nos dois casos, "não apareceu nesta captura" não
+  // quer dizer "não existe mais no site", só que não confiamos nesta leitura.
   const { changesDetected } = result
-    ? await persistAndDetectChanges(supabase, competitorId, result.properties, { stoppedEarlyDueToError })
+    ? await persistAndDetectChanges(supabase, competitorId, result.properties, {
+        stoppedEarlyDueToError: stoppedEarlyDueToError || configLooksDegraded,
+      })
     : { changesDetected: 0 };
+
+  if (configLooksDegraded) {
+    await supabase.from("site_configs").update({ status: "degradado" }).eq("id", siteConfig.id);
+    await supabase.from("notifications").insert({
+      account_id: competitor.account_id,
+      title: `Concorrente com seletores desatualizados: ${competitor.name}`,
+      message: `"${competitor.name}" capturou ${propertiesCaptured} imóveis${
+        propertiesCaptured > 0 ? ` (${result!.cardsWithoutPrice} sem preço)` : ""
+      } nesta checagem — provável mudança no site. O config foi marcado como degradado; a recalibração automática via IA vai rodar na próxima varredura (Etapa 7).`,
+    });
+  }
 
   let pausedByCircuitBreaker = false;
   let reactivatedAfterSuccess = false;
@@ -169,6 +204,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     stoppedEarlyDueToError,
     pausedByCircuitBreaker,
     reactivatedAfterSuccess,
+    configMarkedDegraded: configLooksDegraded,
     errorMessage: totalFailureMessage,
     properties: result?.properties ?? [],
   };

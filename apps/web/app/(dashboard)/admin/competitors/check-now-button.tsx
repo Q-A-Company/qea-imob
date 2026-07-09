@@ -38,7 +38,7 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
                 state.result.stoppedEarlyDueToError ? " (parou cedo por erro)" : ""
               }${state.result.pausedByCircuitBreaker ? " · pausado automaticamente" : ""}${
                 state.result.reactivatedAfterSuccess ? " · reativado" : ""
-              }`
+              }${state.result.configMarkedDegraded ? " · seletores desatualizados, recalibração pendente" : ""}`
             : `Falhou${state.result.errorMessage ? `: ${state.result.errorMessage}` : ""}`}
         </p>
       )}

@@ -48,9 +48,9 @@ Rodando `generateSiteConfig` três vezes seguidas contra o mesmo HTML de `cutrim
 
 Validado: 3 rodadas consecutivas pós-hardening do prompt voltaram todas com `external_id` via `href` (estável) e `sanityOk: true`. O caso ruim foi reproduzido deliberadamente em `scripts/test-sanity-unit.ts` para provar que a rede de segurança em código pega o problema mesmo se o prompt falhar.
 
-### ⚠️ Pré-requisito obrigatório antes da Etapa 7: falso positivo em `checkExternalIdSanity`
+### ✅ RESOLVIDO (2026-07-10): falso positivo em `checkExternalIdSanity` — era pré-requisito bloqueante da Etapa 7
 
-**Não é "nice to have" — é bloqueante.** Descoberto em 2026-07-09 ao semear `mullerimoveis.com.br` como concorrente de demonstração (fora de um teste automatizado, em uso real): `checkExternalIdSanity` rebaixou `confidence_score` para `0.2` mesmo com um `site_config` correto.
+**Estava registrado como bloqueante, não "nice to have".** Descoberto em 2026-07-09 ao semear `mullerimoveis.com.br` como concorrente de demonstração (fora de um teste automatizado, em uso real): `checkExternalIdSanity` rebaixou `confidence_score` para `0.2` mesmo com um `site_config` correto.
 
 Causa: a checagem em `ai/site-config-compatibility.ts` (linha ~27) rejeita sempre que `external_id.attribute === "text" && price.attribute === "text"` — **mesmo quando os seletores CSS são completamente diferentes**. No caso real:
 
@@ -63,7 +63,9 @@ Isso é o mesmo padrão de `external_id` já validado com 61/61 (100%) na Etapa 
 
 **Por que isso bloqueia a Etapa 7, não é só um incômodo cosmético**: a Etapa 7 (self-healing) vai usar exatamente esse sinal para decidir se recalibra via IA automaticamente. Um falso positivo faz `confidence_score` cair para `0.2` num `site_config` perfeitamente funcional — se a Etapa 7 usar esse `confidence_score` (ou o próprio `sanityOk: false`) como gatilho de recalibração, ela vai disparar chamadas de IA desnecessárias em produção para configs que não têm nada de errado. Custo real, recorrente, silencioso.
 
-**Antes de implementar a Etapa 7**: revisar `checkExternalIdSanity` em `ai/site-config-compatibility.ts` para detectar sobreposição real (mesmo seletor, ou um seletor sendo ancestral/descendente do outro no DOM, ou o valor extraído de fato conter o preço) em vez do proxy grosseiro atual (`attribute === "text"` nos dois). Atualizar `scripts/test-sanity-unit.ts` com este caso real (`mullerimoveis`) como regressão — hoje ele só cobre o caso de sobreposição verdadeira (`cutrimimobiliaria`), não o de falso positivo.
+**Correção aplicada**: `checkExternalIdSanity` não testa mais "os dois campos usam texto livre?" — testa se um seletor é **ancestral do outro no DOM** (`isAncestorSelector`, comparação por prefixo de combinador de descendência). É o mecanismo real do bug original: `.text()` do Cheerio num elemento ancestral inclui o texto de todos os descendentes, então só faz sentido sinalizar quando há essa relação estrutural — não quando dois seletores irmãos, sem relação nenhuma, simplesmente extraem texto cada um o seu.
+
+Regressão adicionada em `scripts/test-sanity-unit.ts`: o caso real do `mullerimoveis` (seletores distintos, não sobrepostos) agora passa `compatible: true`; um novo caso sintético de sobreposição genuína (`price` aninhado dentro do seletor de `external_id`) continua sendo rejeitado. 5/5 asserções passando.
 
 ## Requisito para as Etapas 5/6/7 (scheduler, comparação, self-healing — ainda não implementadas): `stoppedEarlyDueToError`
 
@@ -141,3 +143,50 @@ Escopo desta etapa é só "preparar o terreno" (decisão explícita, 2026-07-09)
 - Primeira captura real contra `mullerimoveis.com.br` (conta demo): 61/61 imóveis inseridos em `properties`, `changesDetected: 0` (esperado — tudo novo, nada para comparar ainda).
 
 Não coberto ainda por este trabalho: notificação (sino/e-mail) quando `property_changes` é gerado — isso é Etapa 8/9. `persistAndDetectChanges` só grava o dado; nada consome `property_changes` além do contador `changes_detected` em `scraper_runs`.
+
+## Etapa 7: self-healing / recalibração automática
+
+Dois componentes: o **gatilho** (dentro de `check-competitor.ts`, roda em toda checagem) e a **recalibração** (`jobs/recalibrate-site-config.ts` + `jobs/run-recalibrations.ts`, roda separada, sob demanda ou agendada).
+
+### Gatilho de degradação (`check-competitor.ts`)
+
+Depois de uma captura **completa** (`stoppedEarlyDueToError = false` — isso já exclui falha de rede, que é problema do circuit breaker, não deste gatilho), se `propertiesCaptured === 0` ou `cardsWithoutPrice / propertiesCaptured >= 0.5` (`DEGRADED_MIN_MISSING_PRICE_RATIO`), o `site_config` usado nessa execução é marcado `status = 'degradado'` e uma notificação é criada. Sinal de seletor obsoleto (site mudou o HTML), não de falha em alcançar o site.
+
+**Interação que precisou de cuidado**: se o gatilho disparar por `propertiesCaptured === 0`, isso pareceria pra `persistAndDetectChanges` (Etapa 6) que *todos* os imóveis já salvos sumiram do site — inferência errada (é o seletor que quebrou, não o catálogo que esvaziou). Por isso `configLooksDegraded` também entra no gate que bloqueia a inferência por ausência em `persistAndDetectChanges`, exatamente como `stoppedEarlyDueToError` já fazia — `check-competitor.ts` passa `stoppedEarlyDueToError: stoppedEarlyDueToError || configLooksDegraded` pra ele, mas grava o `stopped_early_due_to_error` **original** (sem o OR) em `scraper_runs`, porque essa coluna tem um significado mais estrito já documentado (falha de rede/servidor especificamente).
+
+### Recalibração (`jobs/recalibrate-site-config.ts`)
+
+`recalibrateSiteConfig(competitorId)`: busca o `site_config` de maior `version` (qualquer status, é o "previous" pra comparação), reaprende do zero via IA (`learnSiteConfig`, Etapa 3 — chamada de IA real, não reaproveita nada do config antigo), e decide:
+
+- **`checkExternalIdCompatibility({ previous, next })` compatível E `externalIdSanityOk`** → insere novo `site_config` com `version + 1`, `status = 'ativo'`. Concorrente volta a ser checado normalmente na próxima varredura.
+- **Incompatível ou reprovado na sanidade** → insere com `status = 'pendente_revisao'`. **Não** mexe no config anterior (que já estava `'degradado'`, vindo do gatilho) — resultado: nenhum `site_config` com `status = 'ativo'` sobra pra esse concorrente até um SuperAdmin revisar (Etapa 12, ainda não existe). `checkCompetitor` trata isso como "nenhum site_config ativo" e simplesmente não checa esse concorrente até a aprovação — comportamento intencional, não um bug: preferimos parar de checar a arriscar quebrar a continuidade de `property_changes` com uma extração estruturalmente diferente sem revisão humana.
+
+Cada tentativa grava uma linha em `scraper_runs` com `run_type = 'recalibracao'` e insere uma notificação (texto diferente pra ativação automática vs. pendência de revisão).
+
+**Nuance de design registrada, não é bug**: quando a recalibração ativa a nova versão, a versão anterior **não** tem seu `status` alterado — se ela já estava `'degradado'` (fluxo normal, veio do gatilho), não há ambiguidade. Mas nos testes deste trabalho, ao seedar uma "previous" artificialmente com `status = 'ativo'` direto (pulando o gatilho) e a recalibração ativar com sucesso, ficam **duas** linhas com `status = 'ativo'` pro mesmo concorrente (versões diferentes). Não é um problema funcional: `check-competitor.ts` sempre busca `.eq('status','ativo').order('version', desc).limit(1)`, então a versão mais alta sempre vence, não importa quantas versões antigas também estejam marcadas `'ativo'`. Registrado porque pode confundir quem olhar a tabela direto no Table Editor.
+
+**Não coberto por este trabalho**: nenhuma UI dispara `recalibrateSiteConfig`/`runRecalibrations` ainda — são funções chamáveis, não há cron nem botão. Isso é orquestração (equivalente ao scheduler da Etapa 5, mas pra recalibração) — natural next step, mas não foi pedido agora. A aprovação de `pendente_revisao` pelo SuperAdmin é Etapa 12.
+
+### Incidente: migration 0003 nunca tinha sido aplicada (2026-07-10)
+
+Ao testar o ramo `pendente_revisao` pela primeira vez, o `INSERT` falhou com `site_configs_status_check` violado — a constraint viva no Supabase ainda era a original (`'ativo', 'degradado', 'aprendendo'`), sem `'pendente_revisao'`. A migration 0003 (criada na Etapa 3, pensando à frente pra esse exato momento) nunca tinha sido de fato executada no banco, apesar de estar documentada como aplicada. Confirmado com um `INSERT` de sonda direto antes de mexer em qualquer outra coisa. Resolvido rodando a migration faltante — sem impacto de dados (é só troca de constraint, nenhuma linha existente violava a nova regra). Numeração dos arquivos (`0001`-`0004`) continua correta e não precisou de ajuste — o atraso foi só na aplicação, e as duas migrations envolvidas (`0003` e `0004`) mexem em tabelas/colunas disjuntas, então a ordem de aplicação não teve efeito no schema final.
+
+### Não-determinismo da IA no tipo de atributo do `external_id` — investigado, não é risco de segurança
+
+Durante a validação, chamadas consecutivas de `learnSiteConfig` contra o **mesmo site** (`mullerimoveis.com.br`) retornaram `external_id.attribute` como `"text"`, depois `"href"`, depois `"data"` em execuções diferentes — não só a seleção do seletor CSS varia (já documentado na Etapa 3), o **tipo de atributo escolhido** também varia. Isso faz `checkExternalIdCompatibility` rejeitar recalibrações que na prática seriam seguras, com mais frequência do que o ideal (prefere `pendente_revisao` a arriscar — comportamento correto, mas custa revisão manual extra).
+
+**Investigado com dados reais (2026-07-10), não só teoria**: rodou `learnSiteConfig` 5 vezes seguidas contra o mesmo site e inspecionou o **valor efetivamente extraído** em cada rodada (`scripts/investigate-external-id-variation.ts`), não só o tipo declarado:
+
+| Rodada | attribute | valor extraído | contém preço/texto instável? |
+|---|---|---|---|
+| 1 | `href` | `/imovel/2631469/casa-venda-guaratuba-pr-prainha` | Não — path de URL com o ID do imóvel |
+| 2, 3, 5 | `data` (`data-imovelid`) | `2631469` | Não — ID numérico puro |
+| 4 | `text` (`.imovelcard__info__ref strong`) | `0028` | Não — código de referência curto |
+
+Conclusão: a variação é **estrutural, não um risco de segurança escapando às vezes**. `href` e `data-attribute` (4 das 5 rodadas) são imunes por construção ao bug original — leem um canal do DOM (atributo HTML, path de URL) onde o preço formatado nunca aparece, diferente do texto visível renderizado. `text` (1 das 5 rodadas) é a única categoria onde o bug pode ocorrer, e é exatamente onde `checkExternalIdSanity` aplica escrutínio (a checagem de sobreposição ancestral) — nessa rodada extraiu um código de referência estável e foi corretamente aprovado. Não é "a proteção falha às vezes"; é a IA escolhendo entre três mecanismos de extração diferentes, dois inertemente seguros e o terceiro coberto pela sanity check.
+
+**Limitação de escopo conhecida, não bloqueio**: `checkExternalIdSanity` defende especificamente contra "`external_id` acidentalmente = preço" — não contra instabilidade de conteúdo por qualquer *outro* motivo (ex: um selo "Novo!" ou contador que muda, texto truncado de forma inconsistente). Não foi observado esse padrão em nenhum dos 7+ sites reais testados neste projeto até agora. Decisão: sem mitigação adicional agora — se aparecer na prática com um cliente real, trata-se naquele momento com um caso concreto em mãos, não por especulação.
+
+**Validado**:
+- `scripts/test-etapa7-recalibration.ts`: gatilho de degradação via `checkCompetitor` (seletor quebrado de propósito, extração completa, 0 imóveis) — `configMarkedDegraded: true`, `site_configs.status = 'degradado'`, notificação correta; recalibração com "previous" incompatível — `activated: false`, `status = 'pendente_revisao'`, nenhum `site_config` `'ativo'` restante.
+- `scripts/test-etapa7-auto-activate.ts`: recalibração com "previous" == resultado real de uma chamada de IA anterior — `activated: true` na 1ª tentativa, nova versão `'ativo'`, prova empírica do ramo de auto-ativação com IA real (não só lido no código).

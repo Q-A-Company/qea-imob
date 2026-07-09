@@ -13,6 +13,7 @@ export interface CheckCompetitorNowState {
     stoppedEarlyDueToError: boolean;
     pausedByCircuitBreaker: boolean;
     reactivatedAfterSuccess: boolean;
+    configMarkedDegraded: boolean;
     errorMessage: string | null;
   };
   error?: string;
@@ -61,6 +62,7 @@ export async function checkCompetitorNowAction(
         stoppedEarlyDueToError: result.stoppedEarlyDueToError,
         pausedByCircuitBreaker: result.pausedByCircuitBreaker,
         reactivatedAfterSuccess: result.reactivatedAfterSuccess,
+        configMarkedDegraded: result.configMarkedDegraded,
         errorMessage: result.errorMessage,
       },
     };
