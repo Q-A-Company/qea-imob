@@ -1,0 +1,111 @@
+import * as cheerio from "cheerio";
+import type { Cheerio, CheerioAPI } from "cheerio";
+import type { AnyNode } from "domhandler";
+import type { HtmlCssSiteConfig } from "../ai/site-config-schema.js";
+import type { ExtractedProperty } from "./types.js";
+import { normalizeExternalId } from "./text-utils.js";
+
+export interface HtmlExtractionResult {
+  properties: ExtractedProperty[];
+  cardsFound: number;
+  cardsWithoutExternalId: number;
+  cardsWithoutPrice: number;
+}
+
+function readField(
+  $card: Cheerio<AnyNode>,
+  $: CheerioAPI,
+  field: { selector: string; attribute: "text" | "href" | "data"; data_attribute: string | null }
+): string | null {
+  const $target = field.selector ? $card.find(field.selector) : $card;
+  if ($target.length === 0) return null;
+
+  let raw: string | undefined;
+  if (field.attribute === "text") {
+    raw = $target.first().text();
+  } else if (field.attribute === "href") {
+    raw = $target.first().attr("href");
+  } else {
+    raw = field.data_attribute ? $target.first().attr(field.data_attribute) : undefined;
+  }
+
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function parsePriceBR(raw: string): number | null {
+  const digitsAndSeparators = raw.replace(/[^\d.,]/g, "");
+  if (!digitsAndSeparators) return null;
+
+  const normalized = digitsAndSeparators.includes(",")
+    ? digitsAndSeparators.replace(/\./g, "").replace(",", ".")
+    : digitsAndSeparators.replace(/\./g, "");
+
+  const value = Number.parseFloat(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function resolveUrl(raw: string, baseUrl: string): string {
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return raw;
+  }
+}
+
+export function extractFromHtml(
+  html: string,
+  config: HtmlCssSiteConfig,
+  listingUrl: string
+): HtmlExtractionResult {
+  const $ = cheerio.load(html);
+  const cards = $(config.card_selector);
+
+  const properties: ExtractedProperty[] = [];
+  let cardsWithoutExternalId = 0;
+  let cardsWithoutPrice = 0;
+
+  cards.each((_, el) => {
+    const $card = $(el);
+
+    const externalId = readField($card, $, config.external_id);
+    if (!externalId) {
+      cardsWithoutExternalId++;
+      return;
+    }
+
+    const rawPrice = readField($card, $, config.price);
+    const rawUrl = readField($card, $, config.property_url);
+    if (!rawUrl) return;
+
+    const isSobConsulta =
+      rawPrice !== null &&
+      config.price.sob_consulta_markers.some((marker) => rawPrice.toLowerCase().includes(marker.toLowerCase()));
+
+    let price: number | null = null;
+    let priceStatus: "valor" | "sob_consulta" = "sob_consulta";
+
+    if (rawPrice && !isSobConsulta) {
+      price = parsePriceBR(rawPrice);
+      priceStatus = price !== null ? "valor" : "sob_consulta";
+    }
+
+    if (priceStatus === "sob_consulta" && !isSobConsulta && rawPrice === null) {
+      cardsWithoutPrice++;
+    }
+
+    properties.push({
+      external_id: normalizeExternalId(externalId),
+      price,
+      price_status: priceStatus,
+      url: resolveUrl(rawUrl, listingUrl),
+    });
+  });
+
+  return {
+    properties,
+    cardsFound: cards.length,
+    cardsWithoutExternalId,
+    cardsWithoutPrice,
+  };
+}

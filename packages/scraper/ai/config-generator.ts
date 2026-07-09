@@ -1,0 +1,79 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { cleanListingHtml } from "../core/html-cleaner.js";
+import { HtmlCssSiteConfig } from "./site-config-schema.js";
+
+// Extração estruturada com schema forçado (output_config.format) — não exige
+// o modelo mais caro. Sonnet 5 entrega qualidade equivalente a Opus em
+// tarefas de mapeamento de estrutura/HTML por uma fração do custo, e essa
+// chamada roda a cada cadastro de concorrente + até 2x/dia em recalibração
+// (self-healing), então o custo por chamada importa.
+const MODEL = "claude-sonnet-5";
+
+const SYSTEM_PROMPT = `Você é um sistema de extração estrutural de HTML. Você recebe o HTML (já limpo de scripts/estilos) de uma página de listagem de imóveis de uma imobiliária e deve identificar os seletores CSS que permitem extrair, de forma determinística (via Cheerio), os dados de cada imóvel anunciado.
+
+A página contém múltiplos "cards" repetidos, cada um representando um imóvel. Identifique:
+1. O seletor CSS do container de cada card.
+2. Dentro do card, como extrair a referência/código externo do imóvel. O external_id DEVE ser um identificador curto e estável — priorize um código/referência visível (ex: "CI0298") ou o slug/ID presente na URL do imóvel. NUNCA use o texto do título, descrição, ou qualquer campo que possa conter preço ou formatação variável entre execuções — esse campo é usado para reconhecer o mesmo imóvel entre checagens ao longo do tempo, e se ele mudar de valor por qualquer motivo que não seja o imóvel ter sido removido, o histórico de preço quebra. Em caso de dúvida entre duas opções, prefira sempre a que vier de um atributo estruturado (href, data-*) a texto livre.
+3. Dentro do card, como extrair o preço — incluindo os textos que indicam "preço sob consulta" (indisponível), se existirem.
+4. Dentro do card, o link para a página individual do imóvel.
+5. O padrão de paginação da listagem, se houver.
+
+Foque apenas nesses campos. Não extraia bairro, área, quartos ou outros dados — não são necessários nesta versão do produto. Se não conseguir identificar um campo com confiança, reflita isso em confidence_score baixo e liste a ressalva em warnings.
+
+Preste atenção especial a sinais de que a paginação é controlada por JavaScript/AJAX e não por navegação de URL simples: um botão (não um link <a href>) para "próxima página", um container com atributo como data-ajax-result, ou uma lista de páginas vazia no HTML estático. Quando notar esses sinais, defina pagination.type como 'next_link' (ou 'none' se nem isso houver) e adicione um warning explícito dizendo que a paginação pode não funcionar sem executar JavaScript.
+
+Sempre procure no texto da página (títulos, contadores de resultado, etc.) alguma menção de quantos imóveis existem no total e preencha total_listings_hint — isso é usado depois para detectar automaticamente quando a página mostra só uma fração do catálogo e vale a pena investigar um endpoint JSON por trás da paginação.`;
+
+export interface GenerateSiteConfigResult {
+  selectors: HtmlCssSiteConfig;
+  cleanedHtmlLength: number;
+  originalHtmlLength: number;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+export async function generateSiteConfig(params: {
+  html: string;
+  listingUrl: string;
+}): Promise<GenerateSiteConfigResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY não configurada");
+  }
+
+  const cleaned = cleanListingHtml(params.html);
+  const client = new Anthropic({ apiKey });
+
+  const response = await client.messages.parse({
+    model: MODEL,
+    max_tokens: 8000,
+    system: SYSTEM_PROMPT,
+    output_config: {
+      format: zodOutputFormat(HtmlCssSiteConfig),
+      effort: "high",
+    },
+    messages: [
+      {
+        role: "user",
+        content: `URL da listagem: ${params.listingUrl}\n\nHTML da página (scripts, estilos e comentários já removidos):\n\n${cleaned.html}`,
+      },
+    ],
+  });
+
+  if (!response.parsed_output) {
+    throw new Error("A IA não retornou um site_config válido para este HTML");
+  }
+
+  return {
+    selectors: response.parsed_output,
+    cleanedHtmlLength: cleaned.cleanedLength,
+    originalHtmlLength: cleaned.originalLength,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    },
+  };
+}
