@@ -33,3 +33,6 @@ next-env.d.ts
 # supabase
 supabase/.branches
 supabase/.temp
+
+# claude code (config local de máquina, não do projeto)
+.claude/

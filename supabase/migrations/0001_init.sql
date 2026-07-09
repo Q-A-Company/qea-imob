@@ -1,4 +1,4 @@
--- Realestate Monitor — schema inicial
+-- Q&A Imob — schema inicial
 -- Tabelas, funções auxiliares de RLS e políticas.
 
 create extension if not exists "pgcrypto";

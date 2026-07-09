@@ -1,4 +1,4 @@
--- Seed de desenvolvimento — Realestate Monitor
+-- Seed de desenvolvimento — Q&A Imob
 --
 -- Usuários de autenticação (auth.users) não são criados aqui. O Supabase
 -- Auth precisa gerar o hash de senha e demais metadados. Com o trigger
