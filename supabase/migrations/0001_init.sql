@@ -123,6 +123,45 @@ create index scraper_runs_competitor_id_idx on public.scraper_runs (competitor_i
 create index restricted_leads_account_id_idx on public.restricted_leads (account_id);
 
 -- =========================================================================
+-- TRIGGER: criação automática de profiles
+--
+-- Não há self-signup público — todo auth.users é criado por um processo
+-- confiável (SuperAdmin criando Admin, Admin convidando Usuario, ou o
+-- primeiro SuperAdmin via Dashboard/Admin API) que deve passar role e
+-- account_id em raw_user_meta_data (options.data no supabase-js), ex:
+--   supabase.auth.admin.createUser({
+--     email, password,
+--     user_metadata: { role: 'admin', account_id, full_name }
+--   })
+-- Se o metadata estiver incompleto (ex: role != 'superadmin' sem
+-- account_id), o insert falha por causa da constraint
+-- profiles_account_required_unless_superadmin, o que aborta a criação do
+-- auth.users inteira — não sobra usuário órfão sem profile.
+-- =========================================================================
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, account_id, role, full_name)
+  values (
+    new.id,
+    nullif(new.raw_user_meta_data->>'account_id', '')::uuid,
+    coalesce(new.raw_user_meta_data->>'role', 'usuario'),
+    new.raw_user_meta_data->>'full_name'
+  );
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- =========================================================================
 -- FUNÇÕES AUXILIARES DE RLS
 -- (security definer para evitar recursão de RLS ao consultar a própria
 -- tabela profiles dentro das policies)
@@ -320,6 +359,15 @@ create policy "account_members_select" on public.restricted_leads
 -- GRANTS
 -- PostgREST só expõe o que for concedido explicitamente às roles da API;
 -- RLS continua sendo a camada que restringe linhas visíveis/afetadas.
+--
+-- service_role (worker/scraper e Server Actions privilegiadas) NÃO precisa
+-- de grant aqui: o Supabase já provisiona essa role com BYPASSRLS e acesso
+-- total ao schema public por padrão. É a role usada por processos de
+-- confiança (packages/scraper, jobs de notificação) via
+-- @supabase/supabase-js puro (sem cookies/sessão de usuário) com a
+-- SUPABASE_SECRET_KEY — nunca exposta ao browser. `authenticated` (usada
+-- pelo publishable key + sessão de login) é quem depende destes grants
+-- combinados com RLS para saber o que pode enxergar/alterar.
 -- =========================================================================
 
 grant usage on schema public to authenticated;
