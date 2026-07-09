@@ -5,6 +5,12 @@ export type PriceStatus = "valor" | "sob_consulta";
 export type PropertyStatus = "ativo" | "possivelmente_vendido";
 export type ScraperRunType = "checagem" | "recalibracao";
 
+// postgrest-js exige que cada tabela tenha `Relationships` e que o schema
+// tenha `Views`/`Functions` (mesmo vazios) para resolver a inferência de
+// tipos — sem isso, Database["public"] deixa de casar com GenericSchema e
+// toda query colapsa silenciosamente para `never`.
+type NoRelationships = { Relationships: [] };
+
 export interface Database {
   public: {
     Tables: {
@@ -22,7 +28,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
-      };
+      } & NoRelationships;
       profiles: {
         Row: {
           id: string;
@@ -39,7 +45,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
-      };
+      } & NoRelationships;
       competitors: {
         Row: {
           id: string;
@@ -62,7 +68,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["competitors"]["Insert"]>;
-      };
+      } & NoRelationships;
       site_configs: {
         Row: {
           id: string;
@@ -85,7 +91,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["site_configs"]["Insert"]>;
-      };
+      } & NoRelationships;
       properties: {
         Row: {
           id: string;
@@ -110,7 +116,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["properties"]["Insert"]>;
-      };
+      } & NoRelationships;
       property_changes: {
         Row: {
           id: string;
@@ -131,7 +137,7 @@ export interface Database {
           detected_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["property_changes"]["Insert"]>;
-      };
+      } & NoRelationships;
       notification_settings: {
         Row: {
           account_id: string;
@@ -146,7 +152,7 @@ export interface Database {
           site_enabled?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["notification_settings"]["Insert"]>;
-      };
+      } & NoRelationships;
       notifications: {
         Row: {
           id: string;
@@ -167,7 +173,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;
-      };
+      } & NoRelationships;
       scraper_runs: {
         Row: {
           id: string;
@@ -190,7 +196,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["scraper_runs"]["Insert"]>;
-      };
+      } & NoRelationships;
       restricted_leads: {
         Row: {
           id: string;
@@ -213,7 +219,9 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["restricted_leads"]["Insert"]>;
-      };
+      } & NoRelationships;
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
   };
 }
