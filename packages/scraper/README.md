@@ -195,7 +195,7 @@ Conclusão: a variação é **estrutural, não um risco de segurança escapando 
 
 `core/notify.ts` (`createNotification`) — ponto único de criação de notificação, criado nesta etapa. Antes, `check-competitor.ts` (pausa por circuit breaker, degradação de config) e `recalibrate-site-config.ts` (resultado da recalibração) inseriam direto em `notifications`, sem checar preferência da conta — refatorados para passar por aqui, então o comportamento fica consistente em todo lugar que notifica, não só nos casos novos desta etapa.
 
-`createNotification` checa `notification_settings.site_enabled` da conta antes de inserir — se `false`, não grava nada e retorna `false` (sem lançar erro; suprimir é o comportamento esperado, não uma falha). Default `true` se a conta ainda não tiver linha em `notification_settings` (não deveria acontecer em uso normal, mas defensivo).
+`createNotification` checa `notification_settings.site_enabled` da conta antes de inserir — se `false`, não grava nada e `siteCreated` volta `false` no retorno (sem lançar erro; suprimir é o comportamento esperado, não uma falha). Default `true` se a conta ainda não tiver linha em `notification_settings` (não deveria acontecer em uso normal, mas defensivo). Desde a Etapa 9, o retorno é um objeto (`{ siteCreated, emailSent, emailError }`), não mais um `boolean` — precisou crescer pra reportar o canal de e-mail também.
 
 **Notificação por mudança de preço/disponibilidade** (`check-competitor.ts`, `notifyPropertyChanges`): depois que `persistAndDetectChanges` (Etapa 6) grava um `property_changes`, uma notificação é criada pra cada linha, com `property_change_id` preenchido — permite no futuro (Etapa 11) linkar a notificação de volta pro imóvel específico. Três textos diferentes conforme o tipo de mudança (preço, sumiu, reapareceu); preço formatado em `R$` (`toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`), não o número cru.
 
@@ -206,6 +206,32 @@ Conclusão: a variação é **estrutural, não um risco de segurança escapando 
 `apps/web/app/(dashboard)/notification-bell.tsx` (Server Component, busca via cliente RLS-scoped) + `notification-bell-client.tsx` (Client Component, dropdown com contador de não lidas, lista das 10 mais recentes, clique marca como lida, botão "marcar todas como lidas"). Ações em `apps/web/lib/notifications/actions.ts` — não usa `requireRole`/reverificação manual de posse como `checkCompetitorNowAction` (Etapa 5) faz, porque aqui a mutação já roda com o cliente RLS-scoped da sessão do usuário (não service-role) e a policy `account_members_update_own` já restringe o `UPDATE` a `account_id = current_account_id()` no próprio banco — reverificar na Server Action seria redundante, a garantia já existe numa camada mais forte.
 
 Sino só aparece para quem tem `account_id` (Admin e Usuario) — SuperAdmin não tem conta própria, escondido por enquanto (painel de notificações cross-conta, se fizer sentido, é escopo da Etapa 12).
+
+## Etapa 9: e-mail via Resend
+
+Escopo combinado com o usuário antes de começar: integração **completa e funcional no código**, mas `notification_settings.email_enabled` continua `false` (default da coluna) pra todas as contas — sem criar conta no Resend, sem testar envio real. Validado de outra forma (ver "Validado" abaixo): provando que o código realmente chama a API do Resend, sem precisar de uma conta de verdade.
+
+**Onde exatamente a chamada acontece**: `packages/scraper/core/send-email.ts` (`sendEmail`) é o **único** lugar do código que chama `resend.emails.send()`. Ninguém mais importa o SDK do Resend diretamente. `sendEmail` só é chamado de um lugar: `core/notify.ts` (`createNotification`), dentro do bloco `if (emailEnabled)`.
+
+**Comportamento quando `email_enabled = false`** (estado real de toda conta hoje): o bloco `if (emailEnabled)` inteiro em `createNotification` é pulado — `sendEmail()` nem é referenciado em tempo de execução, nenhuma chamada de rede acontece, `RESEND_API_KEY` nunca é lido. Confirmado empiricamente, não só por leitura do `if`: chamei `createNotification` com o estado real da conta demo (`email_enabled: false`) e o retorno foi `{ emailSent: false, emailError: null }` — `emailError` **null**, não uma mensagem de erro, prova que o bloco não foi nem tentado (se tivesse tentado e falhado, `emailError` teria um texto).
+
+`site_enabled` e `email_enabled` são checados de forma **independente** um do outro — o schema já modela os dois como colunas separadas em `notification_settings` (mais `whatsapp_enabled`, ainda sem uso), então uma conta poderia hipoteticamente ter e-mail ligado e sino desligado. Não há dependência entre os dois canais.
+
+**Quem recebe o e-mail** (`core/get-account-recipients.ts`): todos os membros da conta (Admin e Usuario), a mesma audiência do sino — `profiles` não guarda e-mail (só existe em `auth.users`, gerenciado pelo Supabase Auth), então resolve e-mail por membro via API admin (`supabase.auth.admin.getUserById`).
+
+**Resiliência**: falha no envio de e-mail (API fora do ar, chave inválida, etc.) é capturada e reportada em `emailError` — **não** lança exceção nem derruba o resto do fluxo. A notificação do sino (se `site_enabled`) já foi gravada antes; uma checagem inteira (`check-competitor.ts`) não pode travar porque o canal secundário falhou.
+
+**O que falta para ativar de verdade**:
+1. Criar conta no [resend.com](https://resend.com) (não feito — decisão do usuário, fora do escopo desta etapa).
+2. Verificar um domínio de envio no Resend (ou usar o endereço de sandbox deles pra teste inicial, com limitações de para-quem-pode-enviar).
+3. Preencher `RESEND_API_KEY` e `RESEND_FROM_EMAIL` em `apps/web/.env.local` — os dois já existem como placeholders vazios desde a Etapa 1 (`RESEND_API_KEY=`, `RESEND_FROM_EMAIL=`), só faltam os valores reais.
+4. Ativar `notification_settings.email_enabled = true` para as contas que devem receber e-mail (hoje `false` em todas, inclusive a demo — deliberado, não mexido nesta etapa).
+Nenhuma mudança de código é necessária pra ativar — é só configuração + a flag por conta.
+
+**Validado** (`scripts/test-etapa9-email.ts`), sem enviar e-mail real:
+- `email_enabled = false` (estado real): bloco de e-mail não executa (`emailError: null`), notificação do sino grava normalmente.
+- `email_enabled = true` mas sem `RESEND_API_KEY`/`RESEND_FROM_EMAIL` configurados (o outro estado real possível hoje): bloqueado por um erro de configuração claro, sem derrubar a notificação do sino.
+- `email_enabled = true` com uma chave **falsa** (só pra provar a integração, não uma conta real): a chamada chega de fato aos servidores do Resend e volta com `"API key is invalid"` — prova que o código passa do guard de configuração e faz uma chamada de rede real pra API certa, não é um stub. `email_enabled` restaurado para `false` ao final do teste.
 
 **Corrigido de passagem**: `apps/web/lib/supabase/types.ts` (`Database`) estava desatualizado desde as migrations 0003/0004 — faltava `'pendente_revisao'` em `SiteConfigStatus` e a coluna `stopped_early_due_to_error` em `scraper_runs`. Corrigido nesta etapa por estar mexendo no mesmo arquivo; não causava bug nesta etapa especificamente, mas ficaria latente pra quando a Etapa 10/12 usar esses campos do lado do `apps/web`.
 

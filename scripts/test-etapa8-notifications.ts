@@ -9,14 +9,14 @@ const supabase = createServiceClient();
 console.log("=== Cenário 1: site_enabled = false suprime a notificação ===");
 await supabase.from("notification_settings").update({ site_enabled: false }).eq("account_id", DEMO_ACCOUNT_ID);
 const created1 = await createNotification(supabase, { accountId: DEMO_ACCOUNT_ID, title: "Teste suprimido", message: "não deveria existir" });
-console.log("createNotification retornou:", created1, created1 === false ? "✅" : "❌");
+console.log("createNotification retornou:", created1, created1.siteCreated === false ? "✅" : "❌");
 const { data: suppressed } = await supabase.from("notifications").select("id").eq("title", "Teste suprimido");
 console.log("linhas gravadas com esse título:", suppressed?.length, suppressed?.length === 0 ? "✅ nada foi inserido" : "❌");
 
 console.log("\n=== Restaurando site_enabled = true ===");
 await supabase.from("notification_settings").update({ site_enabled: true }).eq("account_id", DEMO_ACCOUNT_ID);
 const created2 = await createNotification(supabase, { accountId: DEMO_ACCOUNT_ID, title: "Teste permitido", message: "deveria existir" });
-console.log("createNotification retornou:", created2, created2 === true ? "✅" : "❌");
+console.log("createNotification retornou:", created2, created2.siteCreated === true ? "✅" : "❌");
 const { data: allowed } = await supabase.from("notifications").select("id").eq("title", "Teste permitido");
 console.log("linhas gravadas:", allowed?.length, allowed?.length === 1 ? "✅" : "❌");
 if (allowed?.[0]) await supabase.from("notifications").delete().eq("id", allowed[0].id);
