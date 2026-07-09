@@ -190,3 +190,25 @@ Conclusão: a variação é **estrutural, não um risco de segurança escapando 
 **Validado**:
 - `scripts/test-etapa7-recalibration.ts`: gatilho de degradação via `checkCompetitor` (seletor quebrado de propósito, extração completa, 0 imóveis) — `configMarkedDegraded: true`, `site_configs.status = 'degradado'`, notificação correta; recalibração com "previous" incompatível — `activated: false`, `status = 'pendente_revisao'`, nenhum `site_config` `'ativo'` restante.
 - `scripts/test-etapa7-auto-activate.ts`: recalibração com "previous" == resultado real de uma chamada de IA anterior — `activated: true` na 1ª tentativa, nova versão `'ativo'`, prova empírica do ramo de auto-ativação com IA real (não só lido no código).
+
+## Etapa 8: notificações internas (sino)
+
+`core/notify.ts` (`createNotification`) — ponto único de criação de notificação, criado nesta etapa. Antes, `check-competitor.ts` (pausa por circuit breaker, degradação de config) e `recalibrate-site-config.ts` (resultado da recalibração) inseriam direto em `notifications`, sem checar preferência da conta — refatorados para passar por aqui, então o comportamento fica consistente em todo lugar que notifica, não só nos casos novos desta etapa.
+
+`createNotification` checa `notification_settings.site_enabled` da conta antes de inserir — se `false`, não grava nada e retorna `false` (sem lançar erro; suprimir é o comportamento esperado, não uma falha). Default `true` se a conta ainda não tiver linha em `notification_settings` (não deveria acontecer em uso normal, mas defensivo).
+
+**Notificação por mudança de preço/disponibilidade** (`check-competitor.ts`, `notifyPropertyChanges`): depois que `persistAndDetectChanges` (Etapa 6) grava um `property_changes`, uma notificação é criada pra cada linha, com `property_change_id` preenchido — permite no futuro (Etapa 11) linkar a notificação de volta pro imóvel específico. Três textos diferentes conforme o tipo de mudança (preço, sumiu, reapareceu); preço formatado em `R$` (`toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`), não o número cru.
+
+**Decisão de design**: `persistAndDetectChanges` insere cada `property_changes` **individualmente** (não em lote) — o retorno de um `INSERT` em lote via PostgREST não garante preservar a ordem do array enviado, e isso seria necessário pra casar cada linha inserida com o `external_id` certo pra notificação (não dá pra confiar em "índice N do insert = índice N do array enviado" sem essa garantia documentada). Volume por checagem é pequeno (poucas mudanças por vez), então trocar 1 insert em lote por N inserts pequenos é uma escolha de correção, não uma otimização prematura descartada.
+
+### UI: sino no header do dashboard
+
+`apps/web/app/(dashboard)/notification-bell.tsx` (Server Component, busca via cliente RLS-scoped) + `notification-bell-client.tsx` (Client Component, dropdown com contador de não lidas, lista das 10 mais recentes, clique marca como lida, botão "marcar todas como lidas"). Ações em `apps/web/lib/notifications/actions.ts` — não usa `requireRole`/reverificação manual de posse como `checkCompetitorNowAction` (Etapa 5) faz, porque aqui a mutação já roda com o cliente RLS-scoped da sessão do usuário (não service-role) e a policy `account_members_update_own` já restringe o `UPDATE` a `account_id = current_account_id()` no próprio banco — reverificar na Server Action seria redundante, a garantia já existe numa camada mais forte.
+
+Sino só aparece para quem tem `account_id` (Admin e Usuario) — SuperAdmin não tem conta própria, escondido por enquanto (painel de notificações cross-conta, se fizer sentido, é escopo da Etapa 12).
+
+**Corrigido de passagem**: `apps/web/lib/supabase/types.ts` (`Database`) estava desatualizado desde as migrations 0003/0004 — faltava `'pendente_revisao'` em `SiteConfigStatus` e a coluna `stopped_early_due_to_error` em `scraper_runs`. Corrigido nesta etapa por estar mexendo no mesmo arquivo; não causava bug nesta etapa especificamente, mas ficaria latente pra quando a Etapa 10/12 usar esses campos do lado do `apps/web`.
+
+**Validado** (`scripts/test-etapa8-notifications.ts`): `site_enabled = false` suprime (nenhuma linha gravada, `createNotification` retorna `false`); `site_enabled = true` grava normalmente; mudança de preço real no Muller Imóveis (editado `current_price` pra um valor errado de propósito, rodou `checkCompetitor`) gerou notificação com `property_change_id` preenchido e mensagem correta: *"O imóvel 0028 de 'Muller Imóveis' mudou de R$ 1,00 para R$ 15.000.000,00."*
+
+**Não validado por mim** (sem acesso a navegador): a renderização visual do sino/dropdown em `/admin` — `npm run build` compila sem erro, mas a interação real (abrir dropdown, marcar como lida, contador atualizando) precisa ser conferida no navegador.

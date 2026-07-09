@@ -1,8 +1,51 @@
 import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { runPriceCheck } from "./run-price-check.js";
-import { persistAndDetectChanges } from "./persist-and-compare.js";
+import { persistAndDetectChanges, type DetectedChange } from "./persist-and-compare.js";
+import { createNotification } from "../core/notify.js";
 import type { ExtractedProperty } from "../core/types.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+function formatBRL(value: number | null): string {
+  if (value === null) return "sob consulta";
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// Etapa 8: uma notificação (sino) por property_change — property_change_id
+// preenchido, pra quem clicar na notificação conseguir chegar no imóvel
+// específico depois (Etapa 11). Título/mensagem variam pelo tipo de mudança
+// (preço vs. disponibilidade); os dois nunca preenchidos ao mesmo tempo numa
+// mesma linha (ver persist-and-compare.ts).
+async function notifyPropertyChanges(
+  supabase: SupabaseClient,
+  accountId: string,
+  competitorName: string,
+  changes: DetectedChange[]
+): Promise<void> {
+  for (const change of changes) {
+    if (change.newStatus === "possivelmente_vendido") {
+      await createNotification(supabase, {
+        accountId,
+        propertyChangeId: change.propertyChangeId,
+        title: `Imóvel possivelmente vendido: ${competitorName}`,
+        message: `O imóvel ${change.externalId} não aparece mais na listagem de "${competitorName}" — pode ter sido vendido ou removido.`,
+      });
+    } else if (change.newStatus === "ativo" && change.oldStatus === "possivelmente_vendido") {
+      await createNotification(supabase, {
+        accountId,
+        propertyChangeId: change.propertyChangeId,
+        title: `Imóvel voltou a aparecer: ${competitorName}`,
+        message: `O imóvel ${change.externalId} reapareceu na listagem de "${competitorName}".`,
+      });
+    } else {
+      await createNotification(supabase, {
+        accountId,
+        propertyChangeId: change.propertyChangeId,
+        title: `Mudança de preço: ${competitorName}`,
+        message: `O imóvel ${change.externalId} de "${competitorName}" mudou de ${formatBRL(change.oldPrice)} para ${formatBRL(change.newPrice)}.`,
+      });
+    }
+  }
+}
 
 // Falhas de rede consecutivas (stopped_early_due_to_error) que pausam o
 // concorrente automaticamente e notificam a conta — circuit breaker
@@ -67,6 +110,9 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
 //     preço) marca o site_config como 'degradado' e notifica a conta —
 //     gatilho de recalibração via IA (recalibrate-site-config.ts, Etapa 7),
 //     desacoplado do circuit breaker de falha de rede acima.
+//   - Toda notificação (pausa, degradação, mudança de preço/disponibilidade)
+//     passa por core/notify.ts (Etapa 8), que respeita
+//     notification_settings.site_enabled da conta — não insere mais direto.
 export async function checkCompetitor(competitorId: string): Promise<CheckCompetitorResult> {
   const supabase = createServiceClient();
 
@@ -143,16 +189,20 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   // dentro de persistAndDetectChanges tanto em falha de rede quanto em
   // config degradado — nos dois casos, "não apareceu nesta captura" não
   // quer dizer "não existe mais no site", só que não confiamos nesta leitura.
-  const { changesDetected } = result
+  const { changesDetected, changes } = result
     ? await persistAndDetectChanges(supabase, competitorId, result.properties, {
         stoppedEarlyDueToError: stoppedEarlyDueToError || configLooksDegraded,
       })
-    : { changesDetected: 0 };
+    : { changesDetected: 0, changes: [] };
+
+  if (changes.length > 0) {
+    await notifyPropertyChanges(supabase, competitor.account_id, competitor.name, changes);
+  }
 
   if (configLooksDegraded) {
     await supabase.from("site_configs").update({ status: "degradado" }).eq("id", siteConfig.id);
-    await supabase.from("notifications").insert({
-      account_id: competitor.account_id,
+    await createNotification(supabase, {
+      accountId: competitor.account_id,
       title: `Concorrente com seletores desatualizados: ${competitor.name}`,
       message: `"${competitor.name}" capturou ${propertiesCaptured} imóveis${
         propertiesCaptured > 0 ? ` (${result!.cardsWithoutPrice} sem preço)` : ""
@@ -167,8 +217,8 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     const consecutiveFailures = await countConsecutiveNetworkFailures(supabase, competitorId);
     if (consecutiveFailures + 1 >= CONSECUTIVE_FAILURE_THRESHOLD) {
       await supabase.from("competitors").update({ status: "pausado" }).eq("id", competitorId);
-      await supabase.from("notifications").insert({
-        account_id: competitor.account_id,
+      await createNotification(supabase, {
+        accountId: competitor.account_id,
         title: `Concorrente pausado: ${competitor.name}`,
         message: `"${competitor.name}" foi pausado automaticamente após ${consecutiveFailures + 1} falhas de rede consecutivas ao tentar checar preços. Verifique se o site está acessível e reative manualmente quando resolver.`,
       });

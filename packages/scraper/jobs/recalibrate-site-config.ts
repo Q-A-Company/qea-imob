@@ -1,6 +1,7 @@
 import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { learnSiteConfig } from "./learn-site-config.js";
 import { checkExternalIdCompatibility } from "../ai/site-config-compatibility.js";
+import { createNotification } from "../core/notify.js";
 
 export interface RecalibrateResult {
   competitorId: string;
@@ -83,8 +84,8 @@ export async function recalibrateSiteConfig(competitorId: string): Promise<Recal
     stopped_early_due_to_error: false,
   });
 
-  await supabase.from("notifications").insert({
-    account_id: competitor.account_id,
+  await createNotification(supabase, {
+    accountId: competitor.account_id,
     title: activated
       ? `Concorrente recalibrado: ${competitor.name}`
       : `Recalibração pendente de revisão: ${competitor.name}`,

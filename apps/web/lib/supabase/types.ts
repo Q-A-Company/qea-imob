@@ -1,6 +1,6 @@
 export type UserRole = "superadmin" | "admin" | "usuario";
 export type CompetitorStatus = "ativo" | "pausado" | "erro";
-export type SiteConfigStatus = "ativo" | "degradado" | "aprendendo";
+export type SiteConfigStatus = "ativo" | "degradado" | "aprendendo" | "pendente_revisao";
 export type PriceStatus = "valor" | "sob_consulta";
 export type PropertyStatus = "ativo" | "possivelmente_vendido";
 export type ScraperRunType = "checagem" | "recalibracao";
@@ -183,6 +183,7 @@ export interface Database {
           properties_captured: number;
           changes_detected: number;
           error_message: string | null;
+          stopped_early_due_to_error: boolean;
           created_at: string;
         };
         Insert: {
@@ -193,6 +194,7 @@ export interface Database {
           properties_captured?: number;
           changes_detected?: number;
           error_message?: string | null;
+          stopped_early_due_to_error?: boolean;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["scraper_runs"]["Insert"]>;

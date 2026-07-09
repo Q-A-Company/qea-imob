@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/dal";
 import { logout } from "@/lib/auth/actions";
+import { NotificationBell } from "./notification-bell";
 
 const ROLE_LABEL: Record<string, string> = {
   superadmin: "SuperAdmin",
@@ -19,6 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           Q&A Imob
         </span>
         <div className="flex items-center gap-4">
+          {profile.account_id && <NotificationBell accountId={profile.account_id} />}
           <span className="text-sm text-neutral-500 dark:text-neutral-400">
             {profile.full_name ?? "Sem nome"} · {ROLE_LABEL[profile.role]}
           </span>

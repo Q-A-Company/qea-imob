@@ -9,12 +9,13 @@ interface PropertyRow {
   status: "ativo" | "possivelmente_vendido";
 }
 
-interface PropertyChangeInsert {
-  property_id: string;
-  old_price: number | null;
-  new_price: number | null;
-  old_status: string | null;
-  new_status: string | null;
+export interface DetectedChange {
+  propertyChangeId: string;
+  externalId: string;
+  oldPrice: number | null;
+  newPrice: number | null;
+  oldStatus: string | null;
+  newStatus: string | null;
 }
 
 // Etapa 6: persiste o resultado de uma captura (Etapa 4/5) em `properties` e
@@ -42,7 +43,7 @@ export async function persistAndDetectChanges(
   competitorId: string,
   capturedProperties: ExtractedProperty[],
   options: { stoppedEarlyDueToError: boolean }
-): Promise<{ changesDetected: number }> {
+): Promise<{ changesDetected: number; changes: DetectedChange[] }> {
   const { data: existingRows, error: fetchError } = await supabase
     .from("properties")
     .select("id, external_id, current_price, price_status, status")
@@ -56,7 +57,32 @@ export async function persistAndDetectChanges(
   const capturedExternalIds = new Set(capturedProperties.map((p) => p.external_id));
   const now = new Date().toISOString();
 
-  const changes: PropertyChangeInsert[] = [];
+  // Insere cada property_change individualmente (não em lote) — o retorno
+  // de um INSERT em lote via PostgREST não garante preservar a ordem do
+  // array enviado, e isso seria necessário pra casar cada linha inserida
+  // com o external_id certo (ver DetectedChange). Volume por checagem é
+  // pequeno (poucas mudanças por vez), então N inserts pequenos é uma troca
+  // segura por correção, não uma otimização prematura sendo descartada.
+  async function insertChange(change: {
+    property_id: string;
+    old_price: number | null;
+    new_price: number | null;
+    old_status: string | null;
+    new_status: string | null;
+  }, externalId: string): Promise<DetectedChange> {
+    const { data, error } = await supabase.from("property_changes").insert(change).select("id").single();
+    if (error || !data) throw new Error(`Falha ao gravar property_change: ${error?.message}`);
+    return {
+      propertyChangeId: data.id,
+      externalId,
+      oldPrice: change.old_price,
+      newPrice: change.new_price,
+      oldStatus: change.old_status,
+      newStatus: change.new_status,
+    };
+  }
+
+  const detectedChanges: DetectedChange[] = [];
   const toInsert: Array<{
     competitor_id: string;
     external_id: string;
@@ -99,22 +125,26 @@ export async function persistAndDetectChanges(
     if (updateError) throw new Error(`Falha ao atualizar property ${existing.id}: ${updateError.message}`);
 
     if (priceChanged) {
-      changes.push({
-        property_id: existing.id,
-        old_price: existing.current_price,
-        new_price: captured.price,
-        old_status: null,
-        new_status: null,
-      });
+      detectedChanges.push(
+        await insertChange(
+          { property_id: existing.id, old_price: existing.current_price, new_price: captured.price, old_status: null, new_status: null },
+          existing.external_id
+        )
+      );
     }
     if (reappeared) {
-      changes.push({
-        property_id: existing.id,
-        old_price: existing.current_price,
-        new_price: existing.current_price,
-        old_status: "possivelmente_vendido",
-        new_status: "ativo",
-      });
+      detectedChanges.push(
+        await insertChange(
+          {
+            property_id: existing.id,
+            old_price: existing.current_price,
+            new_price: existing.current_price,
+            old_status: "possivelmente_vendido",
+            new_status: "ativo",
+          },
+          existing.external_id
+        )
+      );
     }
   }
 
@@ -135,21 +165,21 @@ export async function persistAndDetectChanges(
           .eq("id", existing.id);
         if (updateError) throw new Error(`Falha ao marcar property ${existing.id} como possivelmente_vendido: ${updateError.message}`);
 
-        changes.push({
-          property_id: existing.id,
-          old_price: existing.current_price,
-          new_price: existing.current_price,
-          old_status: "ativo",
-          new_status: "possivelmente_vendido",
-        });
+        detectedChanges.push(
+          await insertChange(
+            {
+              property_id: existing.id,
+              old_price: existing.current_price,
+              new_price: existing.current_price,
+              old_status: "ativo",
+              new_status: "possivelmente_vendido",
+            },
+            existing.external_id
+          )
+        );
       }
     }
   }
 
-  if (changes.length > 0) {
-    const { error: changesError } = await supabase.from("property_changes").insert(changes);
-    if (changesError) throw new Error(`Falha ao gravar property_changes: ${changesError.message}`);
-  }
-
-  return { changesDetected: changes.length };
+  return { changesDetected: detectedChanges.length, changes: detectedChanges };
 }
