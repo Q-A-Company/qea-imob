@@ -25,6 +25,7 @@ const { data: competitor, error } = await supabase
   .insert({
     account_id: DEMO_ACCOUNT_ID,
     name: "Teste Circuit Breaker (URL quebrada de propósito)",
+    abbreviation: "TST",
     listing_url: BROKEN_URL,
     polling_interval_minutes: 5,
     status: "ativo",

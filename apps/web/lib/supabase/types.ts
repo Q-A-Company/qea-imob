@@ -51,6 +51,7 @@ export interface Database {
           id: string;
           account_id: string;
           name: string;
+          abbreviation: string;
           listing_url: string;
           polling_interval_minutes: number;
           status: CompetitorStatus;
@@ -61,6 +62,7 @@ export interface Database {
           id?: string;
           account_id: string;
           name: string;
+          abbreviation: string;
           listing_url: string;
           polling_interval_minutes?: number;
           status?: CompetitorStatus;

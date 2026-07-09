@@ -1,0 +1,176 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { UserRole } from "@/lib/supabase/types";
+
+// Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
+// tem "server-only" no topo — importar aqui quebraria o build do client
+// component. É só um mapa de 2 linhas, não vale a pena reestruturar por isso.
+const ROLE_HOME: Record<UserRole, string> = {
+  admin: "/admin",
+  usuario: "/user",
+  superadmin: "/superadmin",
+};
+
+function PulseIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <path d="M2 12h4l2.5-7L13 19l2.5-7H22" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0">
+      <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v5l-1.71 1.71A1 1 0 0 0 4 19.5h16a1 1 0 0 0 .71-1.79Z" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.24.75.24 1.15V10a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  );
+}
+
+function ReportIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <path d="M9 3h6l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+      <path d="M9 12h6M9 16h6M9 8h2" />
+    </svg>
+  );
+}
+
+interface NavItem {
+  key: string;
+  label: string;
+  icon: () => React.ReactElement;
+  href: string;
+  roles: UserRole[];
+}
+
+// Concorrentes/Histórico/Configurações são funções de gestão — escopo
+// explícito da Etapa 10 (telas de Admin). A Etapa 11 (tela de Usuario,
+// read-only) ainda não existe, então por decisão consciente esses 3 itens
+// ficam ocultos pra role 'usuario' por enquanto, em vez de linkar pra rotas
+// /admin/* que redirecionariam o usuário de volta (requireRole('admin')).
+// Painel e Notificações são dados de conta compartilhados, aparecem pros dois.
+function buildNavItems(role: UserRole): NavItem[] {
+  const items: NavItem[] = [
+    { key: "painel", label: "Painel", icon: PulseIcon, href: ROLE_HOME[role], roles: ["admin", "usuario", "superadmin"] },
+    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: "/admin/notifications", roles: ["admin", "usuario"] },
+    { key: "historico", label: "Histórico", icon: ClockIcon, href: "/admin/history", roles: ["admin"] },
+    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin"] },
+    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: "/admin/relatorios", roles: ["admin"] },
+    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin"] },
+  ];
+  return items.filter((item) => item.roles.includes(role));
+}
+
+// event.detail é a contagem de cliques do mouse — 0 quando o link é ativado
+// por teclado (Enter/Espaço), 1+ quando é clique de mouse de verdade. Só tira
+// o foco no caso de mouse: senão, depois de clicar, o link clicado continua
+// focado, focus-within continua verdadeiro, e a sidebar fica presa expandida
+// até o usuário clicar em outro lugar da tela — mesmo com o mouse já longe
+// do menu. Sem afetar Tab: ali detail é sempre 0.
+function blurOnMouseClick(e: React.MouseEvent<HTMLAnchorElement>) {
+  if (e.detail !== 0) {
+    e.currentTarget.blur();
+  }
+}
+
+export function Sidebar({ role }: { role: UserRole }) {
+  const pathname = usePathname();
+  const items = buildNavItems(role);
+
+  return (
+    <>
+      {/* Desktop: overlay que expande no hover/foco — nunca empurra o
+          conteúdo, porque <main> sempre reserva a mesma margem (a largura
+          colapsada), independente do estado da sidebar. */}
+      <nav
+        aria-label="Navegação principal"
+        className="print:hidden group fixed inset-y-0 left-0 z-30 hidden w-16 flex-col gap-1 overflow-hidden border-r border-surface-border bg-surface py-4 transition-[width] duration-200 ease-out hover:w-56 focus-within:w-56 md:flex"
+      >
+        <div className="mb-3 flex items-center gap-3 px-3 text-signal-text">
+          <PulseIcon />
+          <span className="whitespace-nowrap text-sm font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+            Q&amp;A Imob
+          </span>
+        </div>
+        <ul className="flex flex-col gap-1 px-2">
+          {items.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <li key={item.key}>
+                <Link
+                  href={item.href}
+                  onClick={blurOnMouseClick}
+                  className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+                    active ? "bg-signal/10 text-signal-text" : "text-muted hover:bg-background hover:text-foreground"
+                  }`}
+                >
+                  <item.icon />
+                  <span className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    {item.label}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {/* Mobile: bottom nav fixo, só ícones — mais natural que hambúrguer
+          pra 2-5 itens, e não depende de hover (dispositivo de toque). */}
+      <nav
+        aria-label="Navegação principal"
+        className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-surface py-1 md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {items.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              aria-label={item.label}
+              onClick={blurOnMouseClick}
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+                active ? "text-signal-text" : "text-muted"
+              }`}
+            >
+              <item.icon />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </>
+  );
+}

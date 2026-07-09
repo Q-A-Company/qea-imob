@@ -23,6 +23,7 @@ const { data: competitor, error: competitorError } = await supabase
   .insert({
     account_id: DEMO_ACCOUNT_ID,
     name: "Muller Imóveis",
+    abbreviation: "MUL",
     listing_url: url,
     polling_interval_minutes: 5,
     status: "ativo",

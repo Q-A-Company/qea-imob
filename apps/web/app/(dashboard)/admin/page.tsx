@@ -1,17 +1,11 @@
 import { requireRole } from "@/lib/auth/dal";
+import { getDashboardData } from "./get-dashboard-data";
+import { DashboardClient } from "./dashboard-client";
 
 export default async function AdminPage() {
   const profile = await requireRole("admin");
+  // account_id só é null para superadmin, que nunca chega em requireRole("admin").
+  const data = await getDashboardData(profile.account_id!);
 
-  return (
-    <div>
-      <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-        Painel Admin
-      </h1>
-      <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Olá, {profile.full_name ?? profile.id}. Cadastro de concorrentes, histórico e
-        configurações de notificação entram nas próximas etapas.
-      </p>
-    </div>
-  );
+  return <DashboardClient data={data} fullName={profile.full_name} />;
 }

@@ -70,3 +70,49 @@ export async function checkCompetitorNowAction(
     return { error: err instanceof Error ? err.message : "Erro desconhecido ao checar o concorrente" };
   }
 }
+
+export interface RegisterCompetitorState {
+  error?: string;
+}
+
+// Cadastro deliberadamente mínimo — só os campos necessários pra Etapa 10
+// (dashboard/gráficos, precisa de abbreviation) funcionar. Não roda
+// aprendizado via IA aqui (isso ainda é feito por script, ver
+// packages/scraper/jobs/learn-site-config.ts) — o concorrente entra sem
+// site_config, e checkCompetitor já trata esse caso graciosamente
+// ("Nenhum site_config ativo"). Preview de IA/onboarding completo continua
+// pendente de um trabalho futuro dedicado.
+export async function registerCompetitorAction(
+  _prevState: RegisterCompetitorState,
+  formData: FormData
+): Promise<RegisterCompetitorState> {
+  const profile = await requireRole("admin");
+  if (!profile.account_id) return { error: "Conta inválida" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const abbreviation = String(formData.get("abbreviation") ?? "").trim().toUpperCase();
+  const listingUrl = String(formData.get("listingUrl") ?? "").trim();
+  const pollingIntervalRaw = String(formData.get("pollingIntervalMinutes") ?? "");
+  const pollingIntervalMinutes = Number(pollingIntervalRaw);
+
+  if (!name) return { error: "Nome é obrigatório" };
+  if (!abbreviation || abbreviation.length > 6) return { error: "Abreviação precisa ter entre 1 e 6 caracteres" };
+  if (!listingUrl || !listingUrl.startsWith("http")) return { error: "URL da listagem inválida" };
+  if (!Number.isFinite(pollingIntervalMinutes) || pollingIntervalMinutes <= 0) {
+    return { error: "Intervalo de checagem inválido" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("competitors").insert({
+    account_id: profile.account_id,
+    name,
+    abbreviation,
+    listing_url: listingUrl,
+    polling_interval_minutes: pollingIntervalMinutes,
+    status: "ativo",
+  });
+  if (error) return { error: `Falha ao cadastrar: ${error.message}` };
+
+  revalidatePath("/admin/competitors");
+  return {};
+}

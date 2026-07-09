@@ -1,26 +1,134 @@
 @import "tailwindcss";
 
+/* Dark mode por classe (.dark no <html>), não por prefers-color-scheme —
+   necessário pro toggle manual. Ver script anti-flash em app/layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Paleta — ver o plano de design da Etapa 10 (dashboard) para o racional
+     de cada cor. Signal Amber é EXCLUSIVO de "mudança detectada" — nunca
+     decorativo em outro lugar. */
+  --color-signal: #ffb020; /* accent decorativo + texto no modo escuro (contraste ~10.5:1 sobre --color-abyss) */
+  --color-signal-text-light: #946000; /* variante de texto no modo claro (contraste ~4.98:1 sobre --color-mist, AA) */
+  --color-abyss: #0b0f14; /* fundo base modo escuro */
+  --color-mist: #f6f7f9; /* fundo base modo claro */
+  --color-ink: #0f1620; /* texto primário modo claro */
+  --color-fog: #e7ecf1; /* texto primário modo escuro */
+  --color-graphite: #5b6673; /* texto secundário/ícones/bordas nos dois modos */
+
+  --background: var(--color-mist);
+  --foreground: var(--color-ink);
+  --surface: #ffffff;
+  --surface-border: color-mix(in srgb, var(--color-graphite) 20%, transparent);
+  --muted: var(--color-graphite);
+  --signal-text: var(--color-signal-text-light);
+  --signal: var(--color-signal);
+}
+
+.dark {
+  --background: var(--color-abyss);
+  --foreground: var(--color-fog);
+  --surface: #141b23;
+  --surface-border: color-mix(in srgb, var(--color-graphite) 35%, transparent);
+  --muted: var(--color-graphite);
+  --signal-text: var(--color-signal);
+  --signal: var(--color-signal);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-surface: var(--surface);
+  --color-surface-border: var(--surface-border);
+  --color-muted: var(--muted);
+  --color-signal: var(--signal);
+  --color-signal-text: var(--signal-text);
+  /* Texto sobre fundo preenchido com --color-signal (ex: botão de CTA) —
+     sempre escuro, nos dois temas, porque o Signal Amber é sempre claro. */
+  --color-signal-on: var(--color-abyss);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-numeric);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Elemento de assinatura da Etapa 10: varredura de radar atrás da faixa de
+   KPIs. A grade (::before) é estática; a linha de varredura (::after) gira
+   devagar e continuamente, na mesma cor (--color-signal) que marca uma
+   mudança detectada quando ela aparece no feed — o radar procura na mesma
+   cor do que encontra. Confinado a essa única zona da tela, opacidade
+   baixa o suficiente pra não competir com o conteúdo por cima. Congela
+   automaticamente com prefers-reduced-motion (regra global acima já reduz
+   animation-duration para todos os elementos). */
+.radar-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.radar-sweep::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: repeating-radial-gradient(circle at center, var(--color-graphite) 0, transparent 1px, transparent 48px);
+  opacity: 0.07;
+}
+.radar-sweep::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--color-signal) 6deg, transparent 50deg);
+  opacity: 0.14;
+  animation: radar-spin 11s linear infinite;
+}
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Impressão/exportar PDF (Etapa 10.1 — Relatórios): sempre clara e legível
+   em papel, independente do tema ativo na tela. As classes text-black/
+   bg-white/border-neutral-* nos componentes de relatório (com !) já cobrem
+   a maior parte; aqui só o que precisa ser global (margens de página,
+   rodapé repetindo em toda folha). Numeração real de página (N de M) não é
+   confiável só com CSS nos motores de impressão atuais (Chrome em
+   particular) — decisão registrada: página atual aparece via o próprio
+   diálogo de impressão do navegador (cabeçalhos/rodapés nativos, se o
+   usuário habilitar), não reconstruída aqui. */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    font-size: 9px;
+    color: #666;
+    border-top: 1px solid #ccc;
+    padding-top: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

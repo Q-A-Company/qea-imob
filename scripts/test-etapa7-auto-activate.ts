@@ -19,7 +19,7 @@ console.log("external_id.attribute:", (base.selectors as any).external_id.attrib
 
 const { data: competitor, error } = await supabase
   .from("competitors")
-  .insert({ account_id: DEMO_ACCOUNT_ID, name: "Teste Etapa 7 (auto-ativação)", listing_url: REAL_URL, polling_interval_minutes: 5, status: "ativo" })
+  .insert({ account_id: DEMO_ACCOUNT_ID, name: "Teste Etapa 7 (auto-ativação)", abbreviation: "TST", listing_url: REAL_URL, polling_interval_minutes: 5, status: "ativo" })
   .select("id")
   .single();
 if (error || !competitor) throw new Error(`Falha ao criar competitor: ${error?.message}`);

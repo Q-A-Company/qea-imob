@@ -15,6 +15,7 @@ const { data: competitor, error } = await supabase
   .insert({
     account_id: DEMO_ACCOUNT_ID,
     name: "Teste Etapa 6 (persist-and-compare)",
+    abbreviation: "TST",
     listing_url: "https://exemplo-invalido.teste/nao-existe",
     polling_interval_minutes: 5,
     status: "ativo",

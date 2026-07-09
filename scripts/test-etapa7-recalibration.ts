@@ -25,7 +25,7 @@ function dummyConfig(overrides: Partial<HtmlCssSiteConfig>): HtmlCssSiteConfig {
 async function makeCompetitor(name: string, selectors: HtmlCssSiteConfig) {
   const { data: competitor, error } = await supabase
     .from("competitors")
-    .insert({ account_id: DEMO_ACCOUNT_ID, name, listing_url: REAL_URL, polling_interval_minutes: 5, status: "ativo" })
+    .insert({ account_id: DEMO_ACCOUNT_ID, name, abbreviation: "TST", listing_url: REAL_URL, polling_interval_minutes: 5, status: "ativo" })
     .select("id")
     .single();
   if (error || !competitor) throw new Error(`Falha ao criar competitor: ${error?.message}`);
