@@ -7,6 +7,8 @@ import { useCountUp } from "./use-count-up";
 import { ChangesFeed } from "./changes-feed";
 import { VolumeChart } from "./volume-chart";
 import { CompetitorPieChart } from "./competitor-pie-chart";
+import { HourlyVolumeChart } from "./hourly-volume-chart";
+import { VolatilePropertiesCard } from "./volatile-properties-card";
 import { EmptyState } from "./empty-state";
 import type { DashboardData } from "./get-dashboard-data";
 
@@ -96,6 +98,15 @@ export function DashboardClient({
             </motion.div>
             <motion.div variants={item}>
               <VolumeChart dailyVolumes={data.dailyVolumes} />
+            </motion.div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <motion.div variants={item}>
+              <HourlyVolumeChart hourlyVolumes={data.hourlyVolumes30d} />
+            </motion.div>
+            <motion.div variants={item}>
+              <VolatilePropertiesCard properties={data.topVolatileProperties30d} />
             </motion.div>
           </div>
         </>

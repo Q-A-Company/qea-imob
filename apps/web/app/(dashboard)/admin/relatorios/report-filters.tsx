@@ -32,6 +32,14 @@ export function ReportFiltersForm({
   const [status, setStatus] = useState(filters.status);
   const [search, setSearch] = useState(filters.search ?? "");
 
+  // Secundários (direção, variação mínima, status, busca) ficam atrás de
+  // "Mais filtros" — reduz o tamanho visual do bloco no caso comum. Começa
+  // aberto se algum deles já estiver ativo (veio da URL), pra não esconder
+  // um filtro que o usuário já aplicou antes.
+  const [showMore, setShowMore] = useState(
+    filters.direction !== "ambos" || filters.minVariation !== null || filters.status !== "ambos" || Boolean(filters.search)
+  );
+
   // Direção diferente de "ambos" ou variação mínima preenchida excluem
   // mudanças de disponibilidade do resultado (não têm preço pra comparar) —
   // avisado aqui, em tempo real, não só depois do resultado vir vazio.
@@ -107,6 +115,7 @@ export function ReportFiltersForm({
     setMinVariationUnit("reais");
     setStatus("ambos");
     setSearch("");
+    setShowMore(false);
     router.push(basePath);
   }
 
@@ -161,57 +170,70 @@ export function ReportFiltersForm({
             </label>
           </div>
         </div>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted">Direção da mudança</span>
-          <div className="flex gap-3">
-            {(["ambos", "aumento", "reducao"] as const).map((d) => (
-              <label key={d} className="flex items-center gap-1.5 text-sm text-foreground">
-                <input type="radio" name="direction" checked={direction === d} onChange={() => setDirection(d)} />
-                {d === "ambos" ? "Ambas" : d === "aumento" ? "Aumento" : "Redução"}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted">Variação mínima (opcional)</span>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={0}
-              step="any"
-              value={minVariationValue}
-              onChange={(e) => setMinVariationValue(e.target.value)}
-              placeholder="vazio = sem filtro"
-              className={`${inputClass} w-36`}
-            />
-            <select value={minVariationUnit} onChange={(e) => setMinVariationUnit(e.target.value as "reais" | "percent")} className={inputClass}>
-              <option value="reais">R$</option>
-              <option value="percent">%</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted">Status do imóvel (atual)</span>
-          <div className="flex gap-3">
-            {(["ambos", "ativo", "possivelmente_vendido"] as const).map((s) => (
-              <label key={s} className="flex items-center gap-1.5 text-sm text-foreground">
-                <input type="radio" name="status" checked={status === s} onChange={() => setStatus(s)} />
-                {s === "ambos" ? "Ambos" : s === "ativo" ? "Ativo" : "Possiv. vendido"}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="search" className="text-xs font-medium text-muted">
-            Buscar referência do imóvel
-          </label>
-          <input id="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ex: 1006" className={inputClass} />
-        </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowMore((v) => !v)}
+        className="flex w-fit items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+        aria-expanded={showMore}
+      >
+        {showMore ? "Menos filtros ▲" : "Mais filtros ▾"}
+      </button>
+
+      {showMore && (
+        <div className="grid grid-cols-1 gap-4 border-t border-surface-border pt-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Direção da mudança</span>
+            <div className="flex gap-3">
+              {(["ambos", "aumento", "reducao"] as const).map((d) => (
+                <label key={d} className="flex items-center gap-1.5 text-sm text-foreground">
+                  <input type="radio" name="direction" checked={direction === d} onChange={() => setDirection(d)} />
+                  {d === "ambos" ? "Ambas" : d === "aumento" ? "Aumento" : "Redução"}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Variação mínima (opcional)</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={minVariationValue}
+                onChange={(e) => setMinVariationValue(e.target.value)}
+                placeholder="vazio = sem filtro"
+                className={`${inputClass} w-36`}
+              />
+              <select value={minVariationUnit} onChange={(e) => setMinVariationUnit(e.target.value as "reais" | "percent")} className={inputClass}>
+                <option value="reais">R$</option>
+                <option value="percent">%</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Status do imóvel (atual)</span>
+            <div className="flex gap-3">
+              {(["ambos", "ativo", "possivelmente_vendido"] as const).map((s) => (
+                <label key={s} className="flex items-center gap-1.5 text-sm text-foreground">
+                  <input type="radio" name="status" checked={status === s} onChange={() => setStatus(s)} />
+                  {s === "ambos" ? "Ambos" : s === "ativo" ? "Ativo" : "Possiv. vendido"}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="search" className="text-xs font-medium text-muted">
+              Buscar referência do imóvel
+            </label>
+            <input id="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ex: 1006" className={inputClass} />
+          </div>
+        </div>
+      )}
 
       {excludesAvailability && (
         <p className="text-xs text-amber-600 dark:text-amber-400" role="status">

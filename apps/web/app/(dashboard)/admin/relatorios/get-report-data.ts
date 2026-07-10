@@ -4,6 +4,18 @@ import type { PropertyChangeType } from "@/lib/supabase/types";
 
 export const PAGE_SIZE = 50;
 const PROPERTIES_FETCH_PAGE_SIZE = 1000;
+const CHANGES_FETCH_PAGE_SIZE = 1000;
+
+interface ChangeRecord {
+  id: string;
+  property_id: string;
+  change_type: PropertyChangeType;
+  old_price: number | null;
+  new_price: number | null;
+  old_status: string | null;
+  new_status: string | null;
+  detected_at: string;
+}
 
 // Categorias de FILTRO (3-way, decisão confirmada com o usuário) — não o
 // mesmo conjunto de valores de `change_type` no banco (4 valores: price/
@@ -48,10 +60,47 @@ export interface ReportRow {
   detectedAt: string;
 }
 
+export interface ReportIndicators {
+  totalChanges: number;
+  uniquePropertiesChanged: number;
+  byCompetitor: { competitorId: string; name: string; abbreviation: string; count: number }[];
+}
+
 export interface ReportResult {
   rows: ReportRow[];
   totalCount: number;
   competitors: { id: string; name: string; abbreviation: string }[];
+  indicators: ReportIndicators;
+}
+
+const EMPTY_INDICATORS: ReportIndicators = {
+  totalChanges: 0,
+  uniquePropertiesChanged: 0,
+  byCompetitor: [],
+};
+
+// Calculado sobre TODAS as linhas filtradas (antes da paginação) — os
+// indicadores respondem à mesma pergunta que a tabela abaixo deles, só que
+// agregada, não uma amostra da página atual. Os outros indicadores que
+// existiam aqui (por dia, por hora, imóveis voláteis, direção por
+// concorrente) foram removidos/movidos — ver report-charts.tsx.
+function computeIndicators(filtered: ReportRow[]): ReportIndicators {
+  const uniqueProperties = new Set(filtered.map((r) => `${r.competitorId}:${r.externalId}`));
+
+  const byCompetitorMap = new Map<string, { name: string; abbreviation: string; count: number }>();
+  for (const row of filtered) {
+    const competitorEntry = byCompetitorMap.get(row.competitorId);
+    if (competitorEntry) competitorEntry.count++;
+    else byCompetitorMap.set(row.competitorId, { name: row.competitorName, abbreviation: row.competitorAbbreviation, count: 1 });
+  }
+
+  return {
+    totalChanges: filtered.length,
+    uniquePropertiesChanged: uniqueProperties.size,
+    byCompetitor: [...byCompetitorMap.entries()]
+      .map(([competitorId, v]) => ({ competitorId, ...v }))
+      .sort((a, b) => b.count - a.count),
+  };
 }
 
 // direction/minVariation comparam old_price com new_price — o
@@ -87,7 +136,7 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     : [...accountCompetitorIds];
 
   if (targetCompetitorIds.length === 0) {
-    return { rows: [], totalCount: 0, competitors: allCompetitors ?? [] };
+    return { rows: [], totalCount: 0, competitors: allCompetitors ?? [], indicators: EMPTY_INDICATORS };
   }
 
   const competitorMeta = new Map((allCompetitors ?? []).map((c) => [c.id, { name: c.name, abbreviation: c.abbreviation }]));
@@ -120,18 +169,12 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   const propertyIds = new Set(properties.map((p) => p.id));
 
   if (propertyIds.size === 0) {
-    return { rows: [], totalCount: 0, competitors: allCompetitors ?? [] };
+    return { rows: [], totalCount: 0, competitors: allCompetitors ?? [], indicators: EMPTY_INDICATORS };
   }
 
   // Sem .in("property_id", ...) — ver comentário grande acima da função.
   // Filtros de coluna simples só (data, change_type); RLS restringe à conta.
-  let changesQuery = supabase
-    .from("property_changes")
-    .select("id, property_id, change_type, old_price, new_price, old_status, new_status, detected_at");
-
-  if (filters.from) changesQuery = changesQuery.gte("detected_at", `${filters.from}T00:00:00.000Z`);
-  if (filters.to) changesQuery = changesQuery.lte("detected_at", `${filters.to}T23:59:59.999Z`);
-
+  //
   // Categoria de filtro -> change_type real no banco (ver comentário no
   // type ChangeType acima). Só filtra na query quando a seleção é um
   // SUBCONJUNTO das 3 categorias — com as 3 marcadas, equivale a "sem
@@ -140,14 +183,31 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   if (filters.types.includes("preco")) wantedChangeTypes.push("price");
   if (filters.types.includes("adicionado")) wantedChangeTypes.push("added");
   if (filters.types.includes("disponibilidade")) wantedChangeTypes.push("removed", "reappeared");
-  if (wantedChangeTypes.length > 0 && wantedChangeTypes.length < 4) {
-    changesQuery = changesQuery.in("change_type", wantedChangeTypes);
+
+  // Paginado explicitamente, mesmo motivo de buildPropertiesQuery acima —
+  // um período sem filtro de data (estado válido, ver parse-filters.ts) ou
+  // uma conta com meses de histórico pode passar de 1000 property_changes,
+  // e sem .range() o PostgREST corta silenciosamente, subcontando mudanças
+  // no relatório sem nenhum aviso.
+  function buildChangesQuery(offset: number) {
+    let q = supabase
+      .from("property_changes")
+      .select("id, property_id, change_type, old_price, new_price, old_status, new_status, detected_at");
+    if (filters.from) q = q.gte("detected_at", `${filters.from}T00:00:00.000Z`);
+    if (filters.to) q = q.lte("detected_at", `${filters.to}T23:59:59.999Z`);
+    if (wantedChangeTypes.length > 0 && wantedChangeTypes.length < 4) {
+      q = q.in("change_type", wantedChangeTypes);
+    }
+    return q.order("detected_at", { ascending: filters.sort === "asc" }).range(offset, offset + CHANGES_FETCH_PAGE_SIZE - 1);
   }
 
-  changesQuery = changesQuery.order("detected_at", { ascending: filters.sort === "asc" });
-
-  const { data: changes, error: changesError } = await changesQuery;
-  if (changesError) throw new Error(`Falha ao buscar mudanças: ${changesError.message}`);
+  const changes: ChangeRecord[] = [];
+  for (let offset = 0; ; offset += CHANGES_FETCH_PAGE_SIZE) {
+    const { data, error: changesError } = await buildChangesQuery(offset);
+    if (changesError) throw new Error(`Falha ao buscar mudanças: ${changesError.message}`);
+    changes.push(...(data ?? []));
+    if (!data || data.length < CHANGES_FETCH_PAGE_SIZE) break;
+  }
 
   function toRow(change: NonNullable<typeof changes>[number]): ReportRow | null {
     // Interseção com o conjunto de imóveis filtrado (concorrente/status/
@@ -172,7 +232,7 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     };
   }
 
-  const candidateRows = (changes ?? []).map(toRow).filter((r): r is ReportRow => r !== null);
+  const candidateRows = changes.map(toRow).filter((r): r is ReportRow => r !== null);
 
   const needsDirectionFiltering = filters.direction !== "ambos" || filters.minVariation !== null;
   const filtered = !needsDirectionFiltering
@@ -202,5 +262,5 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   const offset = (filters.page - 1) * PAGE_SIZE;
   const rows = filtered.slice(offset, offset + PAGE_SIZE);
 
-  return { rows, totalCount, competitors: allCompetitors ?? [] };
+  return { rows, totalCount, competitors: allCompetitors ?? [], indicators: computeIndicators(filtered) };
 }

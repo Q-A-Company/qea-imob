@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getReportData } from "./get-report-data";
 import { parseFilters, type SearchParams } from "./parse-filters";
 import { ReportFiltersForm } from "./report-filters";
+import { ReportCharts } from "./report-charts";
 import { ReportTable } from "./report-table";
 import { PrintHeader } from "./print-header";
 import { PrintButton } from "./print-button";
@@ -24,7 +25,7 @@ export async function RelatoriosContent({
   const supabase = await createClient();
   const { data: account } = await supabase.from("accounts").select("name").eq("id", accountId).single();
 
-  const { rows, totalCount, competitors } = await getReportData(accountId, filters);
+  const { rows, totalCount, competitors, indicators } = await getReportData(accountId, filters);
 
   const competitorLabel = filters.competitorIds
     ? competitors
@@ -51,16 +52,21 @@ export async function RelatoriosContent({
           <h1 className="text-lg font-semibold text-foreground">Relatórios</h1>
           <p className="mt-1 text-sm text-muted">Histórico completo de mudanças de preço e disponibilidade, com filtros.</p>
         </div>
-        <PrintButton />
+        <PrintButton filters={filters} />
       </div>
 
-      {/* key força o formulário a remontar sempre que a URL de filtros
-          muda (inclusive "Limpar filtros", que navega sem nenhum
-          parâmetro) — sem isso, o useState interno só lê os valores
-          iniciais na primeira montagem e ignora trocas de searchParams,
-          deixando os campos mostrando a seleção antiga mesmo depois da
-          navegação já ter resetado os dados/tabela. */}
+      {/* Ordem: Filtros → Gráficos/indicadores → Tabela. key força o
+          formulário a remontar sempre que a URL de filtros muda (inclusive
+          "Limpar filtros", que navega sem nenhum parâmetro) — sem isso, o
+          useState interno só lê os valores iniciais na primeira montagem e
+          ignora trocas de searchParams, deixando os campos mostrando a
+          seleção antiga mesmo depois da navegação já ter resetado os
+          dados/tabela. */}
       <ReportFiltersForm key={JSON.stringify(searchParams)} competitors={competitors} filters={filters} basePath={basePath} />
+
+      <div className="print:hidden">
+        <ReportCharts indicators={indicators} />
+      </div>
 
       <PrintHeader accountName={account?.name ?? "Conta"} filters={filters} competitorLabel={competitorLabel} />
 
