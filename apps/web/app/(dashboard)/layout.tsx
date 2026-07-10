@@ -23,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Header
           fullName={profile.full_name}
           role={profile.role}
+          avatarUrl={profile.avatar_url}
           notificationSlot={
             profile.account_id ? <NotificationBell accountId={profile.account_id} role={profile.role} /> : null
           }
