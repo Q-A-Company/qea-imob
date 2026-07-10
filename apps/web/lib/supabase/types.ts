@@ -50,6 +50,7 @@ export interface Database {
           account_id: string | null;
           role: UserRole;
           full_name: string | null;
+          email_notifications_enabled: boolean;
           created_at: string;
         };
         Insert: {
@@ -57,6 +58,7 @@ export interface Database {
           account_id?: string | null;
           role: UserRole;
           full_name?: string | null;
+          email_notifications_enabled?: boolean;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
@@ -238,6 +240,19 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["restricted_leads"]["Insert"]>;
+      } & NoRelationships;
+      system_settings: {
+        Row: {
+          id: boolean;
+          email_globally_enabled: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          email_globally_enabled?: boolean;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["system_settings"]["Insert"]>;
       } & NoRelationships;
     };
     Views: Record<string, never>;

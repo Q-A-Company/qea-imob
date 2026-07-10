@@ -372,3 +372,122 @@ No desenho original de roles (Etapa 2) ficou definido que o Admin gerenciaria us
 **Não validado por mim** (sem acesso a navegador): a interação visual em `/admin/users` — item de sidebar "Usuários" pra Admin/Gerente, seletor de cargo condicional, linhas "fora do escopo de gestão" pro Gerente. `npm run build` compila a rota sem erro, mas a navegação real precisa ser conferida no navegador.
 
 **Bug real encontrado no teste visual**: `app/superadmin/accounts/[id]/users/page.tsx` passava as Server Actions do SuperAdmin pra `UserManagementTable` envolvidas em arrow functions só pra fechar sobre `accountId` (ex: `(userId, newRole) => changeUserRoleAction(userId, id, newRole)`) — quebrou em runtime: *"Functions cannot be passed directly to Client Components... Or maybe you meant to call this function rather than return it."* Uma closure comum não é uma Server Action, só a própria referência (ou um `.bind()` dela) atravessa a fronteira Server→Client. Corrigido reordenando os 4 parâmetros dessas Server Actions pra `accountId` vir **primeiro** (`changeUserRoleAction`, `toggleUserBanAction`, `deleteUserAction`, `resetUserPasswordAction`) e trocando as closures por `.bind(null, id)` — `bind` só pré-preenche argumentos a partir do início da lista, por isso a ordem importa. As Server Actions do Admin/Gerente (`lib/users/actions.ts`) nunca tiveram esse problema, porque são passadas direto (`changeRole: changeUserRoleActionForAdmin`), sem nenhuma closure por cima — accountId ali é derivado da sessão, não precisa de bind nenhum.
+
+## WhatsApp: standby deliberado (não reintroduzir sem revisitar a decisão)
+
+Decisão do usuário: WhatsApp não vai ser integrado por enquanto — o processo de aprovação como BSP (Business Solution Provider) é caro e lento, e mesmo pela via oficial ainda carrega risco residual. `packages/scraper/notifications/whatsapp.ts` existe só como adapter noop (loga a intenção, não chama nenhuma API de verdade) — isolado de propósito, pra ativar no futuro ser só trocar o corpo dessa função, sem tocar em `core/notify.ts` nem em nenhuma tela. `notification_settings.whatsapp_enabled` continua no schema (nenhuma migration de remoção) mas não aparece em nenhuma tela — removida a linha "WhatsApp" da visão somente-leitura de Configurações do SuperAdmin (`app/superadmin/accounts/[id]/settings/page.tsx`), já que não faz sentido mostrar uma opção que não funciona de verdade.
+
+Nota de precisão: o pedido de reverter pressupunha que esse adapter já existia em algum estado anterior — conferido antes de mexer em qualquer coisa, ele nunca tinha sido criado (só o placeholder `WHATSAPP_PROVIDER=noop` em `.env.local.example`, desde a Etapa 1). O arquivo foi criado agora já no estado de standby descrito, não "revertido".
+
+## Resumo diário por e-mail (substitui o e-mail por mudança individual)
+
+Mudança de escopo do que a Etapa 9 tinha implementado: `email_enabled` deixou de disparar um e-mail por `property_change` individual dentro de `createNotification` (`core/notify.ts`) — agora só alimenta um resumo agregado, 1x por dia, por conta. O sino (`site_enabled`) **não muda nada** — continua instantâneo, por mudança, exatamente como antes (é gratuito, não depende de API externa, não faz sentido resumir).
+
+**`core/notify.ts` simplificado**: removido o bloco inteiro de e-mail (e os campos `emailSent`/`emailError` do retorno, que nenhum dos 3 call sites — `check-competitor.ts`, `recalibrate-site-config.ts` — sequer lia). Função ficou só sobre o sino agora.
+
+**`packages/scraper/jobs/send-daily-digest.ts`** (novo): pra cada conta com `email_enabled=true`, agrega `property_changes` do dia (UTC, mesma simplificação de fuso já usada em `get-dashboard-data.ts` — não é por usuário) por concorrente, e manda **um** e-mail por conta via Resend (nunca um por mudança). Conta sem nenhuma mudança no dia não recebe nada — pedido explícito do usuário, mensagem vazia não agrega valor e ainda geraria custo/ruído à toa. Falha ao enviar pra uma conta (Resend fora do ar, chave inválida) não derruba as outras — cada conta processada dentro do próprio `try/catch`, erro fica registrado no resultado da conta, não propaga.
+
+**Busca sem os dois bugs de escala já corrigidos nesta sessão**: paginação real (`.range()` em loop) em vez de `.select()`/`.limit()` sem paginação (o bug de truncagem em ~1000 linhas), e nunca `.in("property_id", ...)`/`.in("competitor_id", ...)` com uma lista de IDs — busca tudo paginado e cruza em JS (o bug de URL gigante de `get-dashboard-data.ts`). Como este job varre a tabela toda (não é escopado por conta na query, só depois em JS), essas duas lições valiam a pena aplicar desde o primeiro dia, não descobrir de novo mais tarde.
+
+**Texto exato aprovado** (assunto e corpo, gerados de verdade a partir de dados reais — não mockup):
+
+Um concorrente com mudança:
+```
+Assunto: Resumo diário — 9 de julho de 2026
+
+Hoje, 5 mudanças de preço no concorrente que você monitora:
+
+Sentineli & Sobral: 5 mudanças
+
+Obrigado por usar o Q&A Imob!
+```
+
+Vários concorrentes com mudança (ordenados por quantidade, maior primeiro):
+```
+Assunto: Resumo diário — 9 de julho de 2026
+
+Hoje, 8 mudanças de preço entre os concorrentes que você monitora:
+
+Sentineli & Sobral: 5 mudanças
+Muller Imóveis: 3 mudanças
+
+Obrigado por usar o Q&A Imob!
+```
+
+**Registro auditável**: tabela nova `email_digest_log` (migration `0009`) — não reaproveita `notifications` (que alimenta o sino) de propósito, pra não misturar uma linha de resumo agregado no meio do dropdown do sino, que é só eventos individuais. `unique(account_id, digest_date)` evita duplicar envio se o job rodar duas vezes no mesmo dia (usa `upsert`).
+
+**Nenhum cron real dispara isso sozinho** — mesma lacuna operacional que já existia pras checagens de preço da Etapa 5 (`getDueCompetitors`/`runDueChecks` também nunca são chamadas por nada automático hoje, conferido: zero referências fora da própria definição). `sendDailyDigest()` é uma função chamável — precisa de algo (cron externo, rota agendada) disparando 1x/dia; isso ainda não existe pra nada neste projeto.
+
+**Validado com dados reais** (`scripts` já removidos após o uso): dia sem nenhuma mudança (10/07) corretamente resultou em `skippedReason: "sem mudanças no dia"`, nenhuma tentativa de envio. Dia com mudanças reais (09/07, gerado pelos próprios testes desta sessão): agregação correta por conta/concorrente (Sentineli & Sobral: 5, Muller Imóveis: 3, total 8), destinatários reais resolvidos (2 membros da conta demo), e a falha esperada por `RESEND_API_KEY`/`RESEND_FROM_EMAIL` não configurados (estado real do ambiente, mesma limitação já documentada na Etapa 9) foi capturada no resultado da conta sem derrubar o job.
+
+**Pendente de aplicar**: migration `0009_email_digest_log.sql` ainda precisa ser rodada pelo usuário — sem ela, o passo de registro (`upsert` em `email_digest_log`) falharia mesmo com Resend configurado; a agregação e o texto já funcionam sem ela (validado acima).
+
+### Link pro relatório do dia + idempotência real
+
+Pedido de acompanhamento: o resumo deveria linkar pro relatório **daquele dia específico**, não pra tela de Relatórios em branco. Antes de implementar, confirmado (lendo `parse-filters.ts`) que `/admin/relatorios` e `/user/relatorios` **já** leem `from`/`to` da URL na carga inicial do Server Component — não precisou de nenhum ajuste na tela de Relatórios, a suspeita do usuário de que isso talvez só funcionasse depois de submeter o formulário manualmente não se confirmou.
+
+**Link é por cargo do destinatário**: `getAccountRecipientEmails` virou `getAccountRecipients` (devolve `{email, role}`, não só e-mail) — Corretor (`usuario`) não tem acesso a `/admin/*`, receberia um link que só o rejeitaria; `send-daily-digest.ts` agrupa os destinatários por `basePath` (`/admin/relatorios` pra Diretor/T.I e Gerente, `/user/relatorios` pra Corretor) e manda até 2 e-mails por conta (não um por pessoa), cada um com o link certo: `{APP_BASE_URL}{basePath}?from={digestDate}&to={digestDate}`. Nova env var `APP_BASE_URL` (documentada em `.env.local.example`) — necessária porque um job de backend não tem acesso à origem de uma request HTTP como um Server Component teria.
+
+**Bug de template corrigido de passagem**: `core/send-email.ts` renderizava a mensagem inteira num `<p>` sem `white-space: pre-line` — as quebras de linha do resumo (uma por concorrente) apareceriam tudo grudado numa linha só no e-mail de verdade. Corrigido (mudança aditiva seguinda, não afeta nenhuma mensagem existente de uma linha só).
+
+**Idempotência real, não só em memória**: `sendDailyDigest()` agora checa `email_digest_log` **antes** de enviar (não só no `upsert` depois) — necessário porque o worker (abaixo) roda num loop contínuo com um guard em memória que não sobrevive a um restart; sem a checagem no banco, um redeploy no mesmo dia do envio reenviaria o e-mail pra todo mundo.
+
+**Texto final aprovado** (com o link, gerado de verdade a partir de dados reais):
+```
+Assunto: Resumo diário — 9 de julho de 2026
+
+Hoje, 8 mudanças de preço entre os concorrentes que você monitora:
+
+Sentineli & Sobral: 5 mudanças
+Muller Imóveis: 3 mudanças
+
+Veja o relatório completo de hoje: https://app.qeaimob.com.br/admin/relatorios?from=2026-07-09&to=2026-07-09
+
+Obrigado por usar o Q&A Imob!
+```
+
+## Worker persistente (Railway) — dispara as checagens e o resumo diário de verdade
+
+Achado crítico do usuário que motivou isso: nada disparava `runDueChecks`/`sendDailyDigest` automaticamente — o produto inteiro dependia de clique manual, contradizendo a promessa de "checagem a cada 5 minutos". Avaliadas as opções antes de escolher (pedido explícito do usuário, "não decida sozinho"):
+
+- **Vercel Cron Jobs**: o teto de duração de uma function serverless (Hobby até 60s, Pro configurável até ~300s) é a mesma pra uma rota chamada por cron ou por qualquer outra request. A Sentineli & Sobral sozinha já leva ~4min (~240s) numa varredura completa (~118 páginas) — perto demais do teto do Pro hoje, antes de qualquer crescimento de carteira de clientes. Hobby também só permite cron 1x/dia, inviabilizando "a cada 5 minutos" nesse plano independente do tempo de execução.
+- **Cron externo (GitHub Actions, cron-job.org, etc.) chamando uma rota Vercel**: resolve só a restrição de frequência, não o teto de duração — a rota continua sendo a mesma function serverless.
+- **Supabase pg_cron/Edge Functions**: pg_cron só roda SQL; Edge Functions rodam em Deno, exigiria reescrever `packages/scraper` de Node pra Deno.
+- **Escolhido: worker Node contínuo no Railway** — sem teto de duração por execução, já era o plano original (worker separado do dashboard).
+
+**`apps/worker`** (novo workspace, `apps/*` já é reconhecido pelo `package.json` raiz): processo único, `src/index.ts`, loop com `setTimeout` recursivo (não `setInterval` — uma checagem de minutos não pode deixar o próximo tick começar por cima antes do atual terminar). A cada ciclo (`WORKER_CHECK_INTERVAL_MS`, default 60s): chama `runDueChecks()` (Etapa 5 — `getDueCompetitors` decide quem está devido pelo próprio `polling_interval_minutes`); e, só na hora configurada (`DAILY_DIGEST_HOUR_UTC`, default 23h UTC), uma vez por dia, chama `sendDailyDigest()`.
+
+**Variáveis de ambiente** (`apps/worker/.env.local.example`) — essencialmente as mesmas do `apps/web`, porque roda os mesmos jobs fora do processo do Next.js: `SUPABASE_URL`/`SUPABASE_SECRET_KEY` (service role), `ANTHROPIC_API_KEY` (self-healing), `RESEND_API_KEY`/`RESEND_FROM_EMAIL` (resumo diário), `APP_BASE_URL` (link do relatório), mais `WORKER_CHECK_INTERVAL_MS`/`DAILY_DIGEST_HOUR_UTC` (só do worker, com default sensato). Em produção (Railway), essas variáveis são configuradas direto no painel do serviço — não é lido nenhum arquivo `.env` em produção, só em dev (`npm run dev --workspace=worker`, que usa `--env-file=.env.local`).
+
+**Validado**: `npm install` (novo workspace reconhecido), `npm run build --workspace=worker` (compila `scraper` primeiro, depois o worker) e o típecheck raiz, todos limpos. Rodado de verdade por alguns segundos com credenciais reais — iniciou, logou corretamente, não achou nenhum concorrente devido no momento (não dispara uma varredura completa de graça só de ligar).
+
+**Pendente**: configurar de verdade o serviço no Railway (fora do escopo desta sessão — não tenho acesso a infra de deploy).
+
+### Validado com dados reais depois da migration 0009 aplicada — registro e idempotência
+
+`RESEND_API_KEY`/`RESEND_FROM_EMAIL` continuam não configurados no ambiente real (limitação já conhecida desde a Etapa 9) — então uma tentativa de envio de verdade falha antes de chegar à API do Resend. Isso, na prática, tornou impossível testar "primeira chamada manda um e-mail de verdade, segunda não reenvia" de ponta a ponta sem credenciais reais do Resend. Em vez de simular isso com uma chave falsa (que só provaria de novo a mesma falha de configuração, já documentada), o teste validou o mecanismo de verdade:
+
+1. Primeira chamada, dia real com mudanças (09/07): agregação correta (Sentineli & Sobral: 5, Muller Imóveis: 3, total 8) e a falha esperada de configuração do Resend — **confirmado que esse envio que falhou NÃO gravou nenhuma linha em `email_digest_log`** (não registra como enviado o que não foi enviado de verdade — importante: um `upsert` ingênuo depois do envio, sem essa checagem, teria esse risco).
+2. Semeada manualmente uma linha simulando um envio bem-sucedido anterior pra esse mesmo dia/conta.
+3. Segunda chamada, mesmo dia: **detectou o log existente e pulou antes de sequer buscar destinatários** (`skippedReason: "resumo deste dia já foi enviado"`, sem nenhum erro de Resend — prova de que não chegou a tentar enviar de novo, não só que falhou de novo).
+4. Confirmado que continua existindo exatamente 1 linha de log pra essa conta/dia (sem duplicar).
+
+Estado restaurado ao final (log de teste removido, `email_enabled` de volta a `false`). `scripts` já removidos após o uso.
+
+## Dois níveis extras de controle sobre envio de e-mail (Nível 1 e Nível 2)
+
+Pedido de acompanhamento, três camadas de controle agora, checadas em ordem por `sendDailyDigest()`: (1) interruptor global da plataforma, (2) `notification_settings.email_enabled` por conta (já existia), (3) preferência pessoal por usuário.
+
+**Nível 0** (base pros outros dois, também descoberto faltando nesta rodada): `/admin/settings` era só o placeholder da Etapa 10 desde sempre — nenhum toggle de canal existia. `NotificationChannelToggle` (site/e-mail) construído, editável só por Diretor/T.I e Gerente, com o aviso de `RESEND_API_KEY`/`RESEND_FROM_EMAIL` ausente ao ligar e-mail (salva a intenção mesmo assim — o Admin/Gerente não controla infra, só intenção de negócio).
+
+**Nível 1 — interruptor global** (`system_settings`, migration `0010`): tabela singleton (`id boolean primary key default true check (id = true)` garante exatamente 1 linha) editável só por SuperAdmin, em `/superadmin/system` (novo item de sidebar, fora do shell por conta — é plataforma inteira, não uma conta específica). `sendDailyDigest()` checa isso **antes** de tudo — se desligado, nem consulta contas/mudanças, só retorna `globallyPaused: true`.
+
+**Nível 2 — preferência pessoal** (`profiles.email_notifications_enabled`, migration `0010`): self-service pra qualquer cargo. RLS sozinho só filtra QUAIS linhas (a própria via `id = auth.uid()`) — o `grant update (email_notifications_enabled)` restringe QUAIS colunas, senão a policy sozinha deixaria alterar `role`/`account_id` da própria linha via PATCH direto (risco de escalonamento de privilégio). Componente `PersonalEmailPreferenceToggle` reaproveitado entre `/admin/settings` (Diretor/T.I, Gerente) e um `/user/settings` novo (Corretor) — decisão de manter `/admin/*` como admin/gerente-only (invariante da Etapa 11) em vez de abrir a rota pro Corretor.
+
+**`getAccountRecipients` (core/get-account-recipients.ts) passou a filtrar por `email_notifications_enabled = true`** — quem desligou a própria preferência nunca aparece na lista de destinatários do resumo diário, mesmo com a conta inteira tendo e-mail ligado.
+
+**Validado com dados reais** (conta demo — `scripts` já removidos após o uso):
+- **Interruptor global**: desligado, `sendDailyDigest()` num dia com mudanças reais (09/07) retornou `globallyPaused: true` e **zero contas processadas** — nem a conta demo, que tem `email_enabled=true` e 8 mudanças reais naquele dia, foi sequer consultada. Religado, voltou a processar normalmente (mesma agregação de sempre: Sentineli & Sobral 5, Muller Imóveis 3).
+- **Preferência individual**: criado um usuário de teste (opt-in por padrão, apareceu nos destinatários reais, contagem foi de 2 pra 3). Desligada a preferência só dele: sumiu da lista, e os outros 2 destinatários reais da conta (`joao@teste.com.br`, `user@teste.com.br`) continuaram exatamente os mesmos — confirma que o opt-out é por pessoa, não contamina o resto da conta.
+
+Estado restaurado ao final em ambos os testes (usuário de teste excluído, interruptores voltaram ao estado original).

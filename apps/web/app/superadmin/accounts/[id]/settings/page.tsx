@@ -51,7 +51,8 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
           <>
             <NotificationChannelRow label="Site" enabled={data.notificationSettings.siteEnabled} />
             <NotificationChannelRow label="E-mail" enabled={data.notificationSettings.emailEnabled} />
-            <NotificationChannelRow label="WhatsApp" enabled={data.notificationSettings.whatsappEnabled} />
+            {/* WhatsApp em standby (decisão do usuário) — não mostrar uma
+                opção que não funciona de verdade. Ver README. */}
           </>
         ) : (
           <p className="text-sm text-muted">Nenhuma configuração de notificação definida para esta conta ainda.</p>

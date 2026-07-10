@@ -47,7 +47,7 @@ function renderEmailHtml(title: string, message: string): string {
       <tr>
         <td style="padding:24px;">
           <p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#171717;">${escapeHtml(title)}</p>
-          <p style="margin:0;font-size:14px;line-height:1.5;color:#525252;">${escapeHtml(message)}</p>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#525252;white-space:pre-line;">${escapeHtml(message)}</p>
         </td>
       </tr>
     </table>

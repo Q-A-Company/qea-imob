@@ -110,7 +110,13 @@ function buildNavItems(role: UserRole): NavItem[] {
     // outro gerente/admin — restrição aplicada nas Server Actions, ver
     // lib/users/actions.ts), por isso este item aparece pros dois cargos.
     { key: "usuarios", label: "Usuários", icon: UsersIcon, href: "/admin/users", roles: ["admin", "gerente"] },
-    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin", "gerente"] },
+    // Corretor também acessa — só a preferência PESSOAL de e-mail
+    // (/user/settings, mesmo componente reaproveitado de /admin/settings);
+    // a gestão dos canais da conta continua exclusiva de admin/gerente,
+    // isso é controlado dentro da própria página, não pelo requireRole daqui.
+    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: `${base}/settings`, roles: ["admin", "gerente", "usuario"] },
+    // Plataforma inteira, não escopado a nenhuma conta — só SuperAdmin.
+    { key: "sistema", label: "Sistema", icon: GearIcon, href: "/superadmin/system", roles: ["superadmin"] },
   ];
   return items.filter((item) => item.roles.includes(role));
 }
