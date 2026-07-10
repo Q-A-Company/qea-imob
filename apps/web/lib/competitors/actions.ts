@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
 import { ALLOWED_POLLING_INTERVALS } from "./constants";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export interface CheckCompetitorNowState {
   result?: {
@@ -53,6 +54,14 @@ export async function checkCompetitorNowAction(
   if (!competitor || competitor.account_id !== profile.account_id) {
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
   }
+
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "competitor_check_triggered",
+    targetType: "competitor",
+    targetId: competitorId,
+  });
 
   try {
     const result = await checkCompetitor(competitorId);
@@ -143,6 +152,14 @@ export async function registerCompetitorAction(
     .single();
   if (insertError || !competitor) return { error: `Falha ao cadastrar: ${insertError?.message}` };
 
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "competitor_created",
+    targetType: "competitor",
+    targetId: competitor.id,
+    details: { name, abbreviation, listingUrl },
+  });
   revalidatePath("/admin/competitors");
 
   try {
@@ -274,6 +291,14 @@ export async function updateCompetitorStatusAction(
   const { error } = await supabase.from("competitors").update({ status: newStatus }).eq("id", competitorId);
   if (error) return { error: `Falha ao atualizar status: ${error.message}` };
 
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "competitor_status_changed",
+    targetType: "competitor",
+    targetId: competitorId,
+    details: { newStatus },
+  });
   revalidatePath("/admin/competitors");
   return { success: true };
 }
@@ -296,6 +321,14 @@ export async function updateCompetitorIntervalAction(competitorId: string, minut
   const { error } = await supabase.from("competitors").update({ polling_interval_minutes: minutes }).eq("id", competitorId);
   if (error) return { error: `Falha ao atualizar intervalo: ${error.message}` };
 
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "competitor_interval_changed",
+    targetType: "competitor",
+    targetId: competitorId,
+    details: { minutes },
+  });
   revalidatePath("/admin/competitors");
   return { success: true };
 }

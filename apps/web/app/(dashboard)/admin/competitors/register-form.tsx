@@ -70,10 +70,10 @@ export function RegisterCompetitorForm() {
 
   if (pendingReview && state.learning) {
     return (
-      <div className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
-        <p className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-4 rounded-lg border border-surface-border bg-surface p-5">
+        <h2 className="text-sm font-semibold text-foreground">
           Concorrente cadastrado — revise antes de ativar (estratégia {state.learning.strategy === "html_css" ? "HTML" : "API JSON"})
-        </p>
+        </h2>
         <div className="rounded-md border border-surface-border bg-background p-3 text-sm">
           <p className="text-foreground">{coverageLabel(state.learning.cardsFound, state.learning.totalListingsHint)}</p>
           <p className="mt-0.5 text-muted">
@@ -118,7 +118,8 @@ export function RegisterCompetitorForm() {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
+    <form action={formAction} className="flex flex-col gap-4 rounded-lg border border-surface-border bg-surface p-5">
+      <h2 className="text-sm font-semibold text-foreground">Cadastrar concorrente</h2>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="name" className="text-xs font-medium text-muted">
