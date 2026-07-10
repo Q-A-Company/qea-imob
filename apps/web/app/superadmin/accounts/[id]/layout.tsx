@@ -29,7 +29,7 @@ export default async function AccountShellLayout({
     <div className="min-h-screen bg-background text-foreground">
       <AccountSidebar accountId={id} />
       <div className="pb-16 md:pb-0 md:pl-16 print:pb-0 print:pl-0">
-        <Header fullName={profile.full_name} role={profile.role} notificationSlot={null} />
+        <Header fullName={profile.full_name} role={profile.role} avatarUrl={profile.avatar_url} notificationSlot={null} />
         <div className="print:hidden flex flex-wrap items-center gap-3 border-b border-surface-border bg-signal/10 px-6 py-2 text-sm">
           <span className="text-foreground">
             Visualizando: <strong>{account.name}</strong>

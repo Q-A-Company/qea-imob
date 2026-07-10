@@ -10,6 +10,7 @@ export interface Profile {
   role: UserRole;
   full_name: string | null;
   email_notifications_enabled: boolean;
+  avatar_url: string | null;
 }
 
 export function roleHome(role: UserRole) {
@@ -42,7 +43,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, account_id, role, full_name, email_notifications_enabled")
+    .select("id, account_id, role, full_name, email_notifications_enabled, avatar_url")
     .eq("id", user.id)
     .single();
 

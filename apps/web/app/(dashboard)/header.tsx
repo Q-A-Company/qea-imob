@@ -1,15 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { logout } from "@/lib/auth/actions";
 import { ThemeToggle } from "./theme-toggle";
+import { Avatar } from "./avatar";
 import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
-
-function initials(fullName: string | null): string {
-  if (!fullName) return "?";
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
-}
 
 // Barra utilitária minimalista — a saudação por extenso (Fraunces, com
 // personalidade) vive no corpo da página /admin, não aqui, seguindo a
@@ -18,10 +13,12 @@ function initials(fullName: string | null): string {
 export function Header({
   fullName,
   role,
+  avatarUrl,
   notificationSlot,
 }: {
   fullName: string | null;
   role: UserRole;
+  avatarUrl: string | null;
   notificationSlot: React.ReactNode;
 }) {
   return (
@@ -29,17 +26,17 @@ export function Header({
       <div className="flex items-center gap-3">
         {notificationSlot}
         <ThemeToggle />
-        <div className="flex items-center gap-2">
-          <div
-            aria-hidden
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-signal/15 text-xs font-semibold text-signal-text"
-          >
-            {initials(fullName)}
-          </div>
+        {/* Leva pro próprio perfil (/profile) — rota única compartilhada
+            por todos os cargos, ver app/(dashboard)/profile/page.tsx. */}
+        <Link
+          href="/profile"
+          className="flex items-center gap-2 rounded-md p-1 hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+        >
+          <Avatar avatarUrl={avatarUrl} fullName={fullName} size="sm" />
           <span className="hidden text-sm text-muted sm:inline">
             {fullName ?? "Sem nome"} · {ROLE_LABEL[role]}
           </span>
-        </div>
+        </Link>
         <form action={logout}>
           <button
             type="submit"

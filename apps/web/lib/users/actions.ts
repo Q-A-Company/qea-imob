@@ -5,8 +5,9 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { UserRole } from "@/lib/supabase/types";
-import { BAN_FOREVER, generateTempPassword, wouldRemoveLastAdmin } from "./shared";
+import { BAN_FOREVER, buildProfileUpdateDetails, generateTempPassword, wouldRemoveLastAdmin } from "./shared";
 import type { CreateUserState } from "./types";
+import { logAuditEvent } from "@/lib/audit/log";
 
 // Gestão de usuários pelo Admin ("Diretor / T.I") ou Gerente da PRÓPRIA
 // conta — diferente de app/superadmin/accounts/[id]/actions.ts (SuperAdmin
@@ -65,11 +66,24 @@ export async function changeUserRoleActionForAdmin(userId: string, newRole: User
 
   const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
   if (error) return { error: `Falha ao mudar cargo: ${error.message}` };
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_role_changed",
+    targetType: "user",
+    targetId: userId,
+    details: { oldRole: target.role, newRole },
+  });
   revalidatePath("/admin/users");
   return { success: true };
 }
 
-export async function toggleUserBanActionForAdmin(userId: string, ban: boolean): Promise<ActionState> {
+// reason: motivo opcional (texto livre, nunca obrigatório — pedido
+// explícito). Só relevante pra ban=true; ignorado em ban=false (o motivo do
+// bloqueio ATUAL some quando o acesso é reativado — profiles.block_reason
+// reflete só o estado corrente, o histórico de motivos ao longo do tempo
+// mora no audit_log via details, não aqui).
+export async function toggleUserBanActionForAdmin(userId: string, ban: boolean, reason?: string): Promise<ActionState> {
   const viewer = await requireAccountManager();
   const accountId = viewer.account_id!;
   const target = await getTargetInAccount(userId, accountId);
@@ -88,6 +102,21 @@ export async function toggleUserBanActionForAdmin(userId: string, ban: boolean):
   const serviceClient = createServiceClient();
   const { error } = await serviceClient.auth.admin.updateUserById(userId, { ban_duration: ban ? BAN_FOREVER : "none" });
   if (error) return { error: `Falha ao ${ban ? "desativar" : "reativar"} usuário: ${error.message}` };
+
+  const supabase = await createClient();
+  await supabase
+    .from("profiles")
+    .update({ block_reason: ban ? (reason?.trim() ?? null) : null })
+    .eq("id", userId);
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: ban ? "user_blocked" : "user_unblocked",
+    targetType: "user",
+    targetId: userId,
+    details: ban && reason?.trim() ? { reason: reason.trim() } : undefined,
+  });
   revalidatePath("/admin/users");
   return { success: true };
 }
@@ -109,8 +138,20 @@ export async function deleteUserActionForAdmin(userId: string): Promise<ActionSt
   }
 
   const serviceClient = createServiceClient();
+  // Snapshot ANTES de excluir — depois do delete não tem mais como buscar
+  // e-mail/nome pra registrar no audit_log o que exatamente foi removido.
+  const { data: targetAuthUser } = await serviceClient.auth.admin.getUserById(userId);
   const { error } = await serviceClient.auth.admin.deleteUser(userId);
   if (error) return { error: `Falha ao excluir usuário: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_deleted",
+    targetType: "user",
+    targetId: userId,
+    details: { email: targetAuthUser?.user?.email ?? null, role: target.role },
+  });
   revalidatePath("/admin/users");
   return { success: true };
 }
@@ -138,12 +179,61 @@ export async function resetUserPasswordActionForAdmin(
     const tempPassword = generateTempPassword();
     const { error } = await serviceClient.auth.admin.updateUserById(userId, { password: tempPassword });
     if (error) return { error: `Falha ao redefinir senha: ${error.message}` };
+    await logAuditEvent({
+      actorUserId: viewer.id,
+      accountId,
+      actionType: "user_password_reset",
+      targetType: "user",
+      targetId: userId,
+      details: { mode },
+    });
     return { success: true, tempPassword };
   }
 
   const { data, error } = await serviceClient.auth.admin.generateLink({ type: "recovery", email });
   if (error) return { error: `Falha ao gerar link de redefinição: ${error.message}` };
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_password_reset",
+    targetType: "user",
+    targetId: userId,
+    details: { mode },
+  });
   return { success: true, recoveryLink: data.properties.action_link };
+}
+
+// Terceira opção, ao lado de "temporary"/"link" (resetUserPasswordActionForAdmin
+// acima): admin digita a senha diretamente, em vez de gerar uma senha
+// aleatória ou um link — útil quando o admin quer definir algo específico
+// na hora (ex: repassando por telefone), sem depender do fluxo de
+// copiar/colar de um valor gerado. Usa a Admin API (não a sessão do
+// próprio admin) porque é ELE definindo a senha de OUTRA pessoa — diferente
+// de updateOwnPasswordAction (lib/profile/actions.ts), que é autoatendimento.
+export async function setUserPasswordActionForAdmin(userId: string, newPassword: string): Promise<ActionState> {
+  const viewer = await requireAccountManager();
+  const accountId = viewer.account_id!;
+  const target = await getTargetInAccount(userId, accountId);
+  if (target.error) return target;
+
+  const manageError = assertCanManage(viewer.role, target.role!);
+  if (manageError) return { error: manageError };
+
+  if (newPassword.length < 8) return { error: "A senha precisa ter pelo menos 8 caracteres." };
+
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: `Falha ao definir senha: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_password_reset",
+    targetType: "user",
+    targetId: userId,
+    details: { mode: "direct" },
+  });
+  return { success: true };
 }
 
 // Mesma lógica de scripts/create-admin.mjs / createUserAction do SuperAdmin
@@ -175,6 +265,139 @@ export async function createUserActionForAdmin(_prevState: CreateUserState, form
   });
   if (error || !data.user) return { error: `Falha ao criar usuário: ${error?.message ?? "erro desconhecido"}` };
 
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_created",
+    targetType: "user",
+    targetId: data.user.id,
+    details: { email, role },
+  });
   revalidatePath("/admin/users");
   return { success: true, createdEmail: email, tempPassword };
+}
+
+// Aba "Dados do Colaborador" — nome/e-mail/data de nascimento. E-mail mora
+// em auth.users, não em profiles: só chama a Admin API quando ele de fato
+// mudou, pra não reconfirmar à toa a cada save (email_confirm:true evita
+// reabrir um fluxo de confirmação que este produto não usa).
+export async function updateUserProfileActionForAdmin(
+  userId: string,
+  fullName: string,
+  email: string,
+  birthDate: string | null
+): Promise<ActionState> {
+  const viewer = await requireAccountManager();
+  const accountId = viewer.account_id!;
+  const target = await getTargetInAccount(userId, accountId);
+  if (target.error) return target;
+
+  const manageError = assertCanManage(viewer.role, target.role!);
+  if (manageError) return { error: manageError };
+
+  const trimmedName = fullName.trim();
+  const trimmedEmail = email.trim();
+  const trimmedBirthDate = birthDate || null;
+  if (!trimmedName) return { error: "Nome é obrigatório" };
+  if (!trimmedEmail || !trimmedEmail.includes("@")) return { error: "E-mail inválido" };
+
+  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+
+  // Valores ANTES da mudança — precisa vir antes do update pra
+  // buildProfileUpdateDetails conseguir montar o {from,to} de cada campo.
+  const [{ data: currentProfile }, { data: currentAuthUser }] = await Promise.all([
+    supabase.from("profiles").select("full_name, birth_date").eq("id", userId).single(),
+    serviceClient.auth.admin.getUserById(userId),
+  ]);
+  const oldEmail = currentAuthUser?.user?.email ?? null;
+
+  if (oldEmail !== trimmedEmail) {
+    const { error: emailError } = await serviceClient.auth.admin.updateUserById(userId, {
+      email: trimmedEmail,
+      email_confirm: true,
+    });
+    if (emailError) return { error: `Falha ao alterar e-mail: ${emailError.message}` };
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ full_name: trimmedName, birth_date: trimmedBirthDate })
+    .eq("id", userId);
+  if (error) return { error: `Falha ao salvar dados do colaborador: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_updated",
+    targetType: "user",
+    targetId: userId,
+    details: buildProfileUpdateDetails(
+      { fullName: currentProfile?.full_name ?? null, email: oldEmail, birthDate: currentProfile?.birth_date ?? null },
+      { fullName: trimmedName, email: trimmedEmail, birthDate: trimmedBirthDate }
+    ),
+  });
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+  return { success: true };
+}
+
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_ALLOWED_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+export interface UploadAvatarState extends ActionState {
+  avatarUrl?: string;
+}
+
+// Upload feito pelo Admin/Gerente em nome do colaborador — usa service role
+// de propósito, ignorando a policy "avatars_write_own_folder" (que só cobre
+// autoatualização, ver supabase/migrations/0015_avatars_bucket.sql). Path
+// fixo ({userId}/avatar.{ext}) faz o upload seguinte sobrescrever o
+// anterior (upsert:true) em vez de acumular arquivos órfãos.
+export async function uploadUserAvatarActionForAdmin(userId: string, formData: FormData): Promise<UploadAvatarState> {
+  const viewer = await requireAccountManager();
+  const accountId = viewer.account_id!;
+  const target = await getTargetInAccount(userId, accountId);
+  if (target.error) return target;
+
+  const manageError = assertCanManage(viewer.role, target.role!);
+  if (manageError) return { error: manageError };
+
+  const file = formData.get("avatar");
+  if (!(file instanceof File) || file.size === 0) return { error: "Nenhuma imagem selecionada." };
+  const extension = AVATAR_ALLOWED_TYPES[file.type];
+  if (!extension) return { error: "Formato não suportado — use JPEG, PNG ou WebP." };
+  if (file.size > AVATAR_MAX_BYTES) return { error: "Imagem muito grande — limite de 2 MB." };
+
+  const serviceClient = createServiceClient();
+  const path = `${userId}/avatar.${extension}`;
+  const { error: uploadError } = await serviceClient.storage.from("avatars").upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+  });
+  if (uploadError) return { error: `Falha ao enviar foto: ${uploadError.message}` };
+
+  const { data: publicUrlData } = serviceClient.storage.from("avatars").getPublicUrl(path);
+  // Cache-bust: o path é sempre o mesmo, então sem isso o navegador
+  // continuaria mostrando a foto antiga em cache depois de um reupload.
+  const avatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", userId);
+  if (error) return { error: `Falha ao salvar foto: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_avatar_updated",
+    targetType: "user",
+    targetId: userId,
+  });
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+  return { success: true, avatarUrl };
 }

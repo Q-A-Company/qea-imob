@@ -1,13 +1,10 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { Pencil, Trash2 } from "lucide-react";
 import type { AccountUser } from "@/lib/users/get-account-users";
 import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "Nunca";
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 interface ActionResult {
   error?: string;
@@ -26,17 +23,35 @@ interface ResetPasswordResult extends ActionResult {
 // adapta sua própria Server Action pra essa assinatura de 2-3 argumentos
 // (sem accountId — quem gerencia a própria conta nunca precisa passar isso,
 // é derivado da sessão do lado do servidor; o SuperAdmin captura o
-// accountId por closure na hora de montar essas props).
+// accountId por closure na hora de montar essas props). Reaproveitada
+// também pela página de edição (user-edit-content.tsx), que usa a mesma
+// UserManagementActions pros controles de Segurança.
 export interface UserManagementActions {
   changeRole: (userId: string, newRole: UserRole) => Promise<ActionResult>;
-  toggleBan: (userId: string, ban: boolean) => Promise<ActionResult>;
+  toggleBan: (userId: string, ban: boolean, reason?: string) => Promise<ActionResult>;
   deleteUser: (userId: string) => Promise<ActionResult>;
   resetPassword: (userId: string, email: string, mode: "temporary" | "link") => Promise<ResetPasswordResult>;
+  // Terceira via, ao lado de resetPassword (temporária/link): admin digita a
+  // senha diretamente. Separada de resetPassword porque a assinatura é
+  // diferente (senha em vez de e-mail/modo) e o retorno não tem
+  // tempPassword/recoveryLink pra mostrar.
+  setPassword: (userId: string, newPassword: string) => Promise<ActionResult>;
 }
 
 const DELETE_CONFIRMATION_WORD = "EXCLUIR";
 
-function DeleteUserButton({ user, onDelete }: { user: AccountUser; onDelete: (userId: string) => Promise<ActionResult> }) {
+// compact=true (usado na listagem principal): só o ícone de lixeira.
+// compact=false (usado na página de edição, zona de perigo): botão com
+// texto — mesmo <dialog> de confirmação nos dois casos.
+export function DeleteUserButton({
+  user,
+  onDelete,
+  compact = false,
+}: {
+  user: AccountUser;
+  onDelete: (userId: string) => Promise<ActionResult>;
+  compact?: boolean;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirmText, setConfirmText] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -62,13 +77,25 @@ function DeleteUserButton({ user, onDelete }: { user: AccountUser; onDelete: (us
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openDialog}
-        className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/15"
-      >
-        Excluir
-      </button>
+      {compact ? (
+        <button
+          type="button"
+          onClick={openDialog}
+          aria-label="Excluir usuário"
+          title="Excluir"
+          className="rounded-md p-1.5 text-muted hover:bg-red-500/10 hover:text-red-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={openDialog}
+          className="w-fit rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/15"
+        >
+          Excluir usuário
+        </button>
+      )}
       {/* <dialog> nativo — sem lib de modal, backdrop e Esc-to-close já vêm
           de graça do navegador. Exclusão exige digitar a palavra de
           confirmação, não só um segundo clique — é destrutiva e não tem
@@ -116,84 +143,11 @@ function DeleteUserButton({ user, onDelete }: { user: AccountUser; onDelete: (us
   );
 }
 
-function ResetPasswordControls({
-  user,
-  onReset,
-}: {
-  user: AccountUser;
-  onReset: (userId: string, email: string, mode: "temporary" | "link") => Promise<ResetPasswordResult>;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
-  const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
-
-  function handleReset(mode: "temporary" | "link") {
-    setError(null);
-    setTempPassword(null);
-    setRecoveryLink(null);
-    startTransition(async () => {
-      const result = await onReset(user.id, user.email ?? "", mode);
-      if (result.error) setError(result.error);
-      else if (mode === "temporary") setTempPassword(result.tempPassword ?? null);
-      else setRecoveryLink(result.recoveryLink ?? null);
-    });
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => handleReset("temporary")}
-          disabled={isPending || !user.email}
-          className="rounded-md border border-surface-border px-2.5 py-1 text-xs text-foreground hover:bg-background disabled:opacity-60"
-        >
-          Gerar senha temporária
-        </button>
-        <button
-          type="button"
-          onClick={() => handleReset("link")}
-          disabled={isPending || !user.email}
-          className="rounded-md border border-surface-border px-2.5 py-1 text-xs text-foreground hover:bg-background disabled:opacity-60"
-        >
-          Gerar link de redefinição
-        </button>
-      </div>
-      {error && (
-        <p className="text-[11px] text-red-500" role="alert">
-          {error}
-        </p>
-      )}
-      {tempPassword && (
-        <p className="text-[11px] text-foreground">
-          Senha temporária (copie agora): <code className="rounded bg-background px-1 py-0.5 font-mono">{tempPassword}</code>
-        </p>
-      )}
-      {recoveryLink && (
-        <p className="max-w-72 truncate text-[11px] text-foreground" title={recoveryLink}>
-          Link (copie e envie manualmente — e-mail automático ainda não está ativo):{" "}
-          <code className="rounded bg-background px-1 py-0.5 font-mono">{recoveryLink}</code>
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Cargos que o cargo de quem está vendo a tela pode atribuir via este
-// seletor — reflete a hierarquia confirmada com o usuário: Diretor/T.I
-// (admin) e SuperAdmin atribuem qualquer um dos três; Gerente não atribui
-// cargo nenhum (só gerencia Corretor, sem promover ninguém a par ou acima —
-// por isso nem aparece o seletor pra ele, ver assignableRoles.length === 0).
-function assignableRoles(viewerRole: UserRole): UserRole[] {
-  if (viewerRole === "superadmin" || viewerRole === "admin") return ["admin", "gerente", "usuario"];
-  return [];
-}
-
-// Quem o cargo de quem está vendo a tela pode gerenciar (ban/excluir/resetar
-// senha) — SuperAdmin e Diretor/T.I gerenciam qualquer um na conta; Gerente
-// só gerencia Corretor (usuario), nunca um par ou superior.
-function canManageTarget(viewerRole: UserRole, targetRole: UserRole): boolean {
+// Quem o cargo de quem está vendo a tela pode gerenciar (editar/excluir) —
+// SuperAdmin e Diretor/T.I gerenciam qualquer um na conta; Gerente só
+// gerencia Corretor (usuario), nunca um par ou superior. Reaproveitada por
+// user-edit-content.tsx pra decidir se mostra os controles de Segurança.
+export function canManageTarget(viewerRole: UserRole, targetRole: UserRole): boolean {
   if (viewerRole === "superadmin" || viewerRole === "admin") return true;
   if (viewerRole === "gerente") return targetRole === "usuario";
   return false;
@@ -202,121 +156,77 @@ function canManageTarget(viewerRole: UserRole, targetRole: UserRole): boolean {
 function UserRow({
   user,
   viewerRole,
-  actions,
+  editHref,
+  onDelete,
 }: {
   user: AccountUser;
   viewerRole: UserRole;
-  actions: UserManagementActions;
+  editHref: string;
+  onDelete: (userId: string) => Promise<ActionResult>;
 }) {
-  const [isBanPending, startBanTransition] = useTransition();
-  const [isRolePending, startRoleTransition] = useTransition();
-  const [banError, setBanError] = useState<string | null>(null);
-  const [roleError, setRoleError] = useState<string | null>(null);
-
   const manageable = canManageTarget(viewerRole, user.role);
-  const roleOptions = assignableRoles(viewerRole);
-
-  function handleToggleBan() {
-    setBanError(null);
-    startBanTransition(async () => {
-      const result = await actions.toggleBan(user.id, !user.banned);
-      if (result.error) setBanError(result.error);
-    });
-  }
-
-  function handleRoleChange(newRole: UserRole) {
-    setRoleError(null);
-    startRoleTransition(async () => {
-      const result = await actions.changeRole(user.id, newRole);
-      if (result.error) setRoleError(result.error);
-    });
-  }
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+    <li className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">
           {user.fullName ?? "Sem nome"}
           <span className="ml-2 text-xs text-muted">{ROLE_LABEL[user.role]}</span>
-          {user.banned && (
-            <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">DESATIVADO</span>
-          )}
         </p>
         <p className="truncate text-xs text-muted">{user.email ?? "e-mail não encontrado"}</p>
-        <p className="mt-0.5 text-xs text-muted">
-          Criado em {formatDateTime(user.createdAt)} · Último login: {formatDateTime(user.lastSignInAt)}
-        </p>
-        {manageable && (
-          <div className="mt-2">
-            <ResetPasswordControls user={user} onReset={actions.resetPassword} />
-          </div>
-        )}
       </div>
 
-      {!manageable ? (
-        <p className="shrink-0 text-xs text-muted">Fora do seu escopo de gestão</p>
-      ) : (
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
-            {roleOptions.length > 0 && (
-              <select
-                value={user.role}
-                disabled={isRolePending}
-                onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                className="rounded-md border border-surface-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-signal disabled:opacity-60"
-              >
-                {roleOptions.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button
-              type="button"
-              onClick={handleToggleBan}
-              disabled={isBanPending}
-              className={`rounded-md border px-2.5 py-1 text-xs disabled:opacity-60 ${
-                user.banned
-                  ? "border-green-600/40 bg-green-600/10 text-green-600 hover:bg-green-600/15 dark:border-green-400/40 dark:bg-green-400/10 dark:text-green-400"
-                  : "border-amber-600/40 bg-amber-600/10 text-amber-600 hover:bg-amber-600/15 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-400"
-              }`}
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+            user.banned
+              ? "border-red-500/30 bg-red-500/10 text-red-500 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-400"
+              : "border-green-600/30 bg-green-600/10 text-green-600 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-400"
+          }`}
+        >
+          {user.banned ? "Bloqueado" : "Ativo"}
+        </span>
+
+        {manageable ? (
+          <>
+            <Link
+              href={editHref}
+              aria-label="Editar usuário"
+              title="Editar"
+              className="rounded-md p-1.5 text-muted hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
             >
-              {isBanPending ? "Aguarde..." : user.banned ? "Reativar" : "Desativar"}
-            </button>
-            <DeleteUserButton user={user} onDelete={actions.deleteUser} />
-          </div>
-          {roleError && (
-            <p className="text-[11px] text-red-500" role="alert">
-              {roleError}
-            </p>
-          )}
-          {banError && (
-            <p className="text-[11px] text-red-500" role="alert">
-              {banError}
-            </p>
-          )}
-        </div>
-      )}
+              <Pencil className="h-4 w-4" />
+            </Link>
+            <DeleteUserButton user={user} onDelete={onDelete} compact />
+          </>
+        ) : (
+          <span className="text-xs text-muted">Fora do seu escopo</span>
+        )}
+      </div>
     </li>
   );
 }
 
+// basePath: "/admin/users" ou "/superadmin/accounts/{id}/users" — cada
+// linha vira um link pra "{basePath}/{userId}", a página de edição
+// dedicada (não modal, ver user-edit-content.tsx).
 export function UserManagementTable({
   users,
   viewerRole,
+  basePath,
   actions,
 }: {
   users: AccountUser[];
   viewerRole: UserRole;
+  basePath: string;
   actions: UserManagementActions;
 }) {
   if (users.length === 0) return <p className="text-sm text-muted">Nenhum usuário cadastrado nesta conta ainda.</p>;
 
   return (
-    <ul className="divide-y divide-surface-border rounded-md border border-surface-border bg-surface">
+    <ul className="divide-y divide-surface-border rounded-lg border border-surface-border bg-surface">
       {users.map((user) => (
-        <UserRow key={user.id} user={user} viewerRole={viewerRole} actions={actions} />
+        <UserRow key={user.id} user={user} viewerRole={viewerRole} editHref={`${basePath}/${user.id}`} onDelete={actions.deleteUser} />
       ))}
     </ul>
   );
