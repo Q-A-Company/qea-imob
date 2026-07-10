@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { runPriceCheck } from "./run-price-check.js";
 import { persistAndDetectChanges, type DetectedChange } from "./persist-and-compare.js";
@@ -100,11 +101,31 @@ async function recordRun(supabase: SupabaseClient, run: ScraperRunInsert): Promi
   if (error) throw new Error(`Falha ao gravar scraper_runs: ${error.message}`);
 }
 
-async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competitorId: string): Promise<number> {
+// Completa uma linha de scraper_runs já inserida (ver comentário grande em
+// checkCompetitor sobre por que a linha precisa existir ANTES de
+// persistAndDetectChanges rodar) com os dois campos que só são conhecidos
+// depois: changes_detected (resultado de persistAndDetectChanges) e
+// duration_ms final (só fecha quando a execução inteira termina, não só a
+// extração).
+async function finalizeRun(supabase: SupabaseClient, runId: string, changesDetected: number, durationMs: number): Promise<void> {
+  const { error } = await supabase
+    .from("scraper_runs")
+    .update({ changes_detected: changesDetected, duration_ms: durationMs })
+    .eq("id", runId);
+  if (error) throw new Error(`Falha ao atualizar scraper_runs: ${error.message}`);
+}
+
+// excludeRunId: desde que a migration 0016 passou a exigir a linha de
+// scraper_runs gravada ANTES de persistAndDetectChanges (ver comentário
+// grande em checkCompetitor), a execução ATUAL já existe nesta tabela na
+// hora em que essa contagem roda — sem excluí-la, ela entraria na query E
+// no "+ 1" manual do chamador, contando em dobro.
+async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competitorId: string, excludeRunId: string): Promise<number> {
   const { data } = await supabase
     .from("scraper_runs")
     .select("stopped_early_due_to_error")
     .eq("competitor_id", competitorId)
+    .neq("id", excludeRunId)
     .order("created_at", { ascending: false })
     .limit(10);
 
@@ -137,6 +158,7 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
 //     passa por core/notify.ts (Etapa 8), que respeita
 //     notification_settings.site_enabled da conta — não insere mais direto.
 export async function checkCompetitor(competitorId: string): Promise<CheckCompetitorResult> {
+  const startedAt = Date.now();
   const supabase = createServiceClient();
 
   const { data: competitor, error: competitorError } = await supabase
@@ -167,6 +189,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       changes_detected: 0,
       error_message: "Nenhum site_config ativo para este concorrente",
       stopped_early_due_to_error: false,
+      duration_ms: Date.now() - startedAt,
     });
     return {
       competitorId,
@@ -216,10 +239,32 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   // presença) só é bloqueado por configLooksDegraded: falha de rede não
   // torna o que FOI capturado menos confiável, mas dado suspeito (seletor
   // possivelmente quebrado) sim.
+  // A linha de scraper_runs precisa existir ANTES de persistAndDetectChanges
+  // rodar (não depois, como era antes) — property_changes.scraper_run_id
+  // tem uma FK de verdade pra scraper_runs.id, e o insert de cada mudança
+  // acontece DENTRO de persistAndDetectChanges. Gravar a linha só no final
+  // (como antes da migration 0016) violava a constraint: a mudança tentava
+  // referenciar uma execução que ainda não existia na tabela. Por isso o
+  // insert acontece aqui, com os campos já conhecidos neste ponto
+  // (changes_detected e duration_ms só fecham depois, em finalizeRun).
+  const scraperRunId = randomUUID();
+  await recordRun(supabase, {
+    id: scraperRunId,
+    competitor_id: competitorId,
+    run_type: "checagem",
+    success,
+    properties_captured: propertiesCaptured,
+    changes_detected: 0,
+    error_message: totalFailureMessage,
+    stopped_early_due_to_error: stoppedEarlyDueToError,
+    duration_ms: null,
+  });
+
   const { changesDetected, changes } = result
     ? await persistAndDetectChanges(supabase, competitorId, result.properties, {
         stoppedEarlyDueToError,
         configLooksDegraded,
+        scraperRunId,
       })
     : { changesDetected: 0, changes: [] };
 
@@ -242,7 +287,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   let reactivatedAfterSuccess = false;
 
   if (stoppedEarlyDueToError) {
-    const consecutiveFailures = await countConsecutiveNetworkFailures(supabase, competitorId);
+    const consecutiveFailures = await countConsecutiveNetworkFailures(supabase, competitorId, scraperRunId);
     if (consecutiveFailures + 1 >= CONSECUTIVE_FAILURE_THRESHOLD) {
       await supabase.from("competitors").update({ status: "pausado" }).eq("id", competitorId);
       await createNotification(supabase, {
@@ -262,15 +307,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     reactivatedAfterSuccess = true;
   }
 
-  await recordRun(supabase, {
-    competitor_id: competitorId,
-    run_type: "checagem",
-    success,
-    properties_captured: propertiesCaptured,
-    changes_detected: changesDetected,
-    error_message: totalFailureMessage,
-    stopped_early_due_to_error: stoppedEarlyDueToError,
-  });
+  await finalizeRun(supabase, scraperRunId, changesDetected, Date.now() - startedAt);
 
   await supabase.from("competitors").update({ last_checked_at: new Date().toISOString() }).eq("id", competitorId);
 

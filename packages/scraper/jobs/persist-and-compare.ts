@@ -70,7 +70,7 @@ export async function persistAndDetectChanges(
   supabase: SupabaseClient,
   competitorId: string,
   capturedProperties: ExtractedProperty[],
-  options: { stoppedEarlyDueToError: boolean; configLooksDegraded: boolean }
+  options: { stoppedEarlyDueToError: boolean; configLooksDegraded: boolean; scraperRunId: string | null }
 ): Promise<{ changesDetected: number; changes: DetectedChange[] }> {
   const existingRows = await fetchAllExistingProperties(supabase, competitorId);
 
@@ -93,7 +93,11 @@ export async function persistAndDetectChanges(
     old_status: string | null;
     new_status: string | null;
   }, externalId: string): Promise<DetectedChange> {
-    const { data, error } = await supabase.from("property_changes").insert(change).select("id").single();
+    const { data, error } = await supabase
+      .from("property_changes")
+      .insert({ ...change, scraper_run_id: options.scraperRunId })
+      .select("id")
+      .single();
     if (error || !data) throw new Error(`Falha ao gravar property_change: ${error?.message}`);
     return {
       propertyChangeId: data.id,

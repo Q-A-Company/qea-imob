@@ -26,6 +26,7 @@ export interface SiteConfigRow {
 }
 
 export interface ScraperRunInsert {
+  id?: string;
   competitor_id: string;
   run_type: "checagem" | "recalibracao";
   success: boolean;
@@ -33,6 +34,7 @@ export interface ScraperRunInsert {
   changes_detected: number;
   error_message: string | null;
   stopped_early_due_to_error: boolean;
+  duration_ms: number | null;
 }
 
 // Service role: já vem com BYPASSRLS por padrão no Supabase (ver

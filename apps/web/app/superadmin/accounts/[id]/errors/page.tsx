@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
+import { formatDuration } from "@/lib/format";
+import { getRunChangesByRunId } from "@/lib/scraper-runs/get-run-changes";
+import { ExpandableRow } from "@/app/(dashboard)/expandable-row";
+import { PropertyChangeRow } from "@/app/(dashboard)/property-change-row";
 import { getAccountErrorRuns, ERROR_RUNS_PAGE_SIZE } from "../get-account-error-runs";
 
 const RUN_TYPE_LABEL: Record<string, string> = {
@@ -25,6 +29,7 @@ export default async function AccountErrorsPage({
 
   const { runs, totalCount } = await getAccountErrorRuns(id, page);
   const totalPages = Math.max(1, Math.ceil(totalCount / ERROR_RUNS_PAGE_SIZE));
+  const changesByRunId = await getRunChangesByRunId(runs.map((r) => r.id));
 
   function buildUrl(p: number): string {
     return `/superadmin/accounts/${id}/errors?page=${p}`;
@@ -42,30 +47,51 @@ export default async function AccountErrorsPage({
       {runs.length === 0 && <p className="text-sm text-muted">Nenhuma execução com erro registrada para esta conta.</p>}
 
       {runs.length > 0 && (
-        <ul className="divide-y divide-surface-border rounded-md border border-surface-border bg-surface">
-          {runs.map((run) => (
-            <li key={run.id} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {run.competitorName}
-                  <span className="ml-2 text-xs text-muted">{RUN_TYPE_LABEL[run.runType] ?? run.runType}</span>
-                  {!run.success && (
-                    <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">FALHOU</span>
-                  )}
-                  {run.stoppedEarlyDueToError && (
-                    <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                      PAROU CEDO
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {run.propertiesCaptured} imóveis capturados
-                  {run.errorMessage ? ` · erro: ${run.errorMessage}` : ""}
-                </p>
-              </div>
-              <span className="shrink-0 text-xs text-muted">{formatDateTime(run.createdAt)}</span>
-            </li>
-          ))}
+        <ul className="divide-y divide-surface-border rounded-lg border border-surface-border bg-surface">
+          {runs.map((run) => {
+            const changes = changesByRunId.get(run.id) ?? [];
+            return (
+              <ExpandableRow
+                key={run.id}
+                summary={
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {run.competitorName}
+                        <span className="ml-2 text-xs font-normal text-muted">{RUN_TYPE_LABEL[run.runType] ?? run.runType}</span>
+                        {!run.success && (
+                          <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">FALHOU</span>
+                        )}
+                        {run.stoppedEarlyDueToError && (
+                          <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                            PAROU CEDO
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {run.propertiesCaptured} imóveis capturados
+                        {run.errorMessage ? ` · erro: ${run.errorMessage}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3 text-xs text-muted">
+                      <span>{formatDuration(run.durationMs)}</span>
+                      <span>{formatDateTime(run.createdAt)}</span>
+                    </div>
+                  </div>
+                }
+              >
+                {changes.length === 0 ? (
+                  <p className="text-xs text-muted">Nenhum imóvel mudou nesta execução.</p>
+                ) : (
+                  <ul className="divide-y divide-surface-border rounded-md border border-surface-border bg-background px-3">
+                    {changes.map((change) => (
+                      <PropertyChangeRow key={change.id} change={change} />
+                    ))}
+                  </ul>
+                )}
+              </ExpandableRow>
+            );
+          })}
         </ul>
       )}
 

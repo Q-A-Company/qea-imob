@@ -32,6 +32,7 @@ async function recordRun(supabase: ReturnType<typeof createServiceClient>, run: 
 // função só roda para configs que capturaram uma extração completa mas de
 // baixa qualidade (0 imóveis ou maioria sem preço).
 export async function recalibrateSiteConfig(competitorId: string): Promise<RecalibrateResult> {
+  const startedAt = Date.now();
   const supabase = createServiceClient();
 
   const { data: competitor, error: competitorError } = await supabase
@@ -82,6 +83,7 @@ export async function recalibrateSiteConfig(competitorId: string): Promise<Recal
     changes_detected: 0,
     error_message: activated ? null : `pendente_revisao: ${compatibility.reasons.join("; ")}`,
     stopped_early_due_to_error: false,
+    duration_ms: Date.now() - startedAt,
   });
 
   await createNotification(supabase, {

@@ -10,6 +10,7 @@ export interface AccountErrorRun {
   stoppedEarlyDueToError: boolean;
   propertiesCaptured: number;
   errorMessage: string | null;
+  durationMs: number | null;
   createdAt: string;
 }
 
@@ -44,9 +45,10 @@ export async function getAccountErrorRuns(accountId: string, page: number): Prom
 
   const { data, error, count } = await supabase
     .from("scraper_runs")
-    .select("id, competitor_id, run_type, success, properties_captured, error_message, stopped_early_due_to_error, created_at", {
-      count: "exact",
-    })
+    .select(
+      "id, competitor_id, run_type, success, properties_captured, error_message, stopped_early_due_to_error, duration_ms, created_at",
+      { count: "exact" }
+    )
     .in("competitor_id", competitorIds)
     .or("success.eq.false,stopped_early_due_to_error.eq.true")
     .order("created_at", { ascending: false })
@@ -63,6 +65,7 @@ export async function getAccountErrorRuns(accountId: string, page: number): Prom
       stoppedEarlyDueToError: r.stopped_early_due_to_error,
       propertiesCaptured: r.properties_captured,
       errorMessage: r.error_message,
+      durationMs: r.duration_ms,
       createdAt: r.created_at,
     })),
     totalCount: count ?? 0,
