@@ -9,9 +9,12 @@ interface PropertyRow {
   status: "ativo" | "possivelmente_vendido";
 }
 
+export type ChangeType = "price" | "added" | "removed" | "reappeared";
+
 export interface DetectedChange {
   propertyChangeId: string;
   externalId: string;
+  changeType: ChangeType;
   oldPrice: number | null;
   newPrice: number | null;
   oldStatus: string | null;
@@ -23,21 +26,15 @@ export interface DetectedChange {
 // cache" quer dizer literalmente isso — compara contra o que já está salvo,
 // não recalcula nada a partir do zero.
 //
-// Duas dimensões de mudança, cada uma pode gerar sua própria linha em
-// property_changes (não são mutuamente exclusivas, mas raramente ocorrem
-// juntas na prática):
-//   1. Preço/price_status mudou num imóvel já conhecido (old_price/new_price
-//      preenchidos, old_status/new_status = null).
-//   2. Disponibilidade mudou — imóvel sumiu da listagem (ativo →
-//      possivelmente_vendido) ou reapareceu (possivelmente_vendido → ativo)
-//      (old_status/new_status preenchidos, old_price/new_price = preço
-//      atual, sem mudança).
-//
-// Decisão de escopo (2026-07-10): imóvel novo (external_id nunca visto
-// antes) só é inserido em `properties` — NÃO gera property_changes. O
-// schema até permitiria (old_price nullable), mas "comparação com cache"
-// pressupõe uma entrada anterior pra comparar; sem isso não há mudança,
-// só uma captura nova. Registrado no README para poder ser revisto.
+// Quatro tipos de evento, cada um pode gerar sua própria linha em
+// property_changes (change_type explícito, migration 0011 — antes disso
+// era inferido de quais colunas de status estavam nulas, o que ficou
+// inviável quando "adicionado" também precisa de old_status/new_status
+// nulos, igual "price"):
+//   1. 'price' — preço/price_status mudou num imóvel já conhecido.
+//   2. 'added' — external_id nunca visto antes para este concorrente.
+//   3. 'removed' — imóvel sumiu da listagem (ativo → possivelmente_vendido).
+//   4. 'reappeared' — imóvel voltou a aparecer (possivelmente_vendido → ativo).
 const FETCH_PAGE_SIZE = 1000;
 
 // O PostgREST devolve no máximo ~1000 linhas por resposta por padrão,
@@ -73,13 +70,14 @@ export async function persistAndDetectChanges(
   supabase: SupabaseClient,
   competitorId: string,
   capturedProperties: ExtractedProperty[],
-  options: { stoppedEarlyDueToError: boolean }
+  options: { stoppedEarlyDueToError: boolean; configLooksDegraded: boolean }
 ): Promise<{ changesDetected: number; changes: DetectedChange[] }> {
   const existingRows = await fetchAllExistingProperties(supabase, competitorId);
 
   const existingByExternalId = new Map<string, PropertyRow>(existingRows.map((row) => [row.external_id, row]));
   const capturedExternalIds = new Set(capturedProperties.map((p) => p.external_id));
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
 
   // Insere cada property_change individualmente (não em lote) — o retorno
   // de um INSERT em lote via PostgREST não garante preservar a ordem do
@@ -89,6 +87,7 @@ export async function persistAndDetectChanges(
   // segura por correção, não uma otimização prematura sendo descartada.
   async function insertChange(change: {
     property_id: string;
+    change_type: ChangeType;
     old_price: number | null;
     new_price: number | null;
     old_status: string | null;
@@ -99,6 +98,7 @@ export async function persistAndDetectChanges(
     return {
       propertyChangeId: data.id,
       externalId,
+      changeType: change.change_type,
       oldPrice: change.old_price,
       newPrice: change.new_price,
       oldStatus: change.old_status,
@@ -128,7 +128,7 @@ export async function persistAndDetectChanges(
         price_status: captured.price_status,
         url: captured.url,
         status: "ativo",
-        last_seen_at: now,
+        last_seen_at: nowIso,
       });
       continue;
     }
@@ -142,7 +142,7 @@ export async function persistAndDetectChanges(
         current_price: captured.price,
         price_status: captured.price_status,
         url: captured.url,
-        last_seen_at: now,
+        last_seen_at: nowIso,
         status: "ativo",
       })
       .eq("id", existing.id);
@@ -151,7 +151,14 @@ export async function persistAndDetectChanges(
     if (priceChanged) {
       detectedChanges.push(
         await insertChange(
-          { property_id: existing.id, old_price: existing.current_price, new_price: captured.price, old_status: null, new_status: null },
+          {
+            property_id: existing.id,
+            change_type: "price",
+            old_price: existing.current_price,
+            new_price: captured.price,
+            old_status: null,
+            new_status: null,
+          },
           existing.external_id
         )
       );
@@ -161,6 +168,7 @@ export async function persistAndDetectChanges(
         await insertChange(
           {
             property_id: existing.id,
+            change_type: "reappeared",
             old_price: existing.current_price,
             new_price: existing.current_price,
             old_status: "possivelmente_vendido",
@@ -172,22 +180,64 @@ export async function persistAndDetectChanges(
     }
   }
 
+  // 'added' é baseado em PRESENÇA (o imóvel foi realmente observado nesta
+  // captura, com este preço) — diferente de 'removed', que é baseado em
+  // AUSÊNCIA (inferência: "não vi", que pode só significar "não alcancei").
+  // Por isso 'added' ignora stoppedEarlyDueToError (falha de rede não torna
+  // o que FOI capturado menos confiável) mas continua bloqueado por
+  // configLooksDegraded (extração completou mas parece lixo — um seletor
+  // quebrado pode gerar external_id inválido, que nunca bateria com nada
+  // existente e pareceria "novo" sem ser um imóvel de verdade). Distinção
+  // confirmada com o usuário antes de implementar.
   if (toInsert.length > 0) {
     // upsert, não insert puro — rede de segurança ADICIONAL à paginação
     // acima (que já corrige a causa raiz), não um substituto dela: mesmo
     // com a busca completa, upsert evita que qualquer outra causa futura
     // de "achei que era novo mas já existia" vire um 500 pro usuário em vez
     // de simplesmente atualizar a linha que já existe.
-    const { error: insertError } = await supabase
+    const { data: upsertedRows, error: insertError } = await supabase
       .from("properties")
-      .upsert(toInsert, { onConflict: "competitor_id,external_id" });
+      .upsert(toInsert, { onConflict: "competitor_id,external_id" })
+      .select("id, external_id, created_at");
     if (insertError) throw new Error(`Falha ao inserir novas properties: ${insertError.message}`);
+
+    if (!options.configLooksDegraded) {
+      const capturedByExternalId = new Map(capturedProperties.map((p) => [p.external_id, p]));
+      for (const row of upsertedRows ?? []) {
+        // upsert pode, em teoria, ter batido num conflito real (a linha já
+        // existia apesar do mapa em memória não ter achado) — nesse caso o
+        // created_at devolvido é ANTIGO, não de agora, e não é um
+        // "adicionado" de verdade. created_at recente = inserção genuína.
+        const ageMs = now.getTime() - new Date(row.created_at).getTime();
+        if (ageMs > 60_000) continue;
+
+        const captured = capturedByExternalId.get(row.external_id);
+        if (!captured) continue;
+
+        detectedChanges.push(
+          await insertChange(
+            {
+              property_id: row.id,
+              change_type: "added",
+              old_price: null,
+              new_price: captured.price,
+              old_status: null,
+              new_status: null,
+            },
+            row.external_id
+          )
+        );
+      }
+    }
   }
 
-  // "Sumiu = possivelmente vendido" só vale para execuções completas — ver
-  // README, contrato definido antes da Etapa 5: uma captura parcial não
-  // pode ser lida como "esses imóveis não estão mais no site".
-  if (!options.stoppedEarlyDueToError) {
+  // "Sumiu = possivelmente vendido" só vale para execuções completas E com
+  // dado confiável — ver README, contrato definido antes da Etapa 5: uma
+  // captura parcial (falha de rede) ou de qualidade suspeita (seletores
+  // possivelmente quebrados) não pode ser lida como "esses imóveis não
+  // estão mais no site".
+  const blockAbsenceInference = options.stoppedEarlyDueToError || options.configLooksDegraded;
+  if (!blockAbsenceInference) {
     for (const existing of existingByExternalId.values()) {
       if (existing.status === "ativo" && !capturedExternalIds.has(existing.external_id)) {
         const { error: updateError } = await supabase
@@ -200,6 +250,7 @@ export async function persistAndDetectChanges(
           await insertChange(
             {
               property_id: existing.id,
+              change_type: "removed",
               old_price: existing.current_price,
               new_price: existing.current_price,
               old_status: "ativo",

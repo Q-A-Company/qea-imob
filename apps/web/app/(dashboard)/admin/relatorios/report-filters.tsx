@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { defaultDateRange } from "./default-date-range";
-import type { ReportFilters } from "./get-report-data";
+import type { ChangeType, ReportFilters } from "./get-report-data";
 
 const inputClass =
   "rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal";
@@ -49,7 +49,7 @@ export function ReportFiltersForm({
     });
   }
 
-  function toggleType(type: "preco" | "disponibilidade") {
+  function toggleType(type: ChangeType) {
     setTypes((prev) => {
       if (prev.includes(type)) {
         const next = prev.filter((t) => t !== type);
@@ -101,7 +101,7 @@ export function ReportFiltersForm({
     setSelectedCompetitors(null);
     setFrom(defaults.from);
     setTo(defaults.to);
-    setTypes(["preco", "disponibilidade"]);
+    setTypes(["preco", "adicionado", "disponibilidade"]);
     setDirection("ambos");
     setMinVariationValue("");
     setMinVariationUnit("reais");
@@ -150,6 +150,10 @@ export function ReportFiltersForm({
             <label className="flex items-center gap-1.5 text-sm text-foreground">
               <input type="checkbox" checked={types.includes("preco")} onChange={() => toggleType("preco")} />
               Preço
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-foreground">
+              <input type="checkbox" checked={types.includes("adicionado")} onChange={() => toggleType("adicionado")} />
+              Adicionado
             </label>
             <label className="flex items-center gap-1.5 text-sm text-foreground">
               <input type="checkbox" checked={types.includes("disponibilidade")} onChange={() => toggleType("disponibilidade")} />
@@ -211,7 +215,7 @@ export function ReportFiltersForm({
 
       {excludesAvailability && (
         <p className="text-xs text-amber-600 dark:text-amber-400" role="status">
-          Direção específica ou variação mínima preenchida — mudanças de disponibilidade (sem preço pra comparar) ficam excluídas do resultado.
+          Direção específica ou variação mínima preenchida — mudanças de disponibilidade e imóveis adicionados (sem preço antigo pra comparar) ficam excluídos do resultado.
         </p>
       )}
 

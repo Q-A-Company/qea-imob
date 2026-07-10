@@ -4,10 +4,22 @@ import { getAccountRecipients } from "../core/get-account-recipients.js";
 
 const FETCH_PAGE_SIZE = 1000;
 
+interface ChangeTypeCounts {
+  price: number;
+  added: number;
+  removed: number;
+  reappeared: number;
+}
+
+function emptyChangeTypeCounts(): ChangeTypeCounts {
+  return { price: 0, added: 0, removed: 0, reappeared: 0 };
+}
+
 interface CompetitorBreakdownEntry {
   competitorId: string;
   competitorName: string;
-  changes: number;
+  changes: number; // total, soma dos 4 tipos
+  byType: ChangeTypeCounts;
 }
 
 export interface AccountDigestResult {
@@ -58,6 +70,18 @@ function buildReportLink(basePath: string, digestDate: string): string {
   return `${appBaseUrl}${basePath}?from=${digestDate}&to=${digestDate}`;
 }
 
+// Detalha um competitor: "5 mudanças de preço, 2 adicionados, 1 removido" —
+// só os tipos com contagem > 0 aparecem, pra não poluir o caso comum (só
+// preço). Mesma ordem/formato de check-now-button.tsx (formatChangesBreakdown).
+function describeCompetitorBreakdown(b: CompetitorBreakdownEntry): string {
+  const parts: string[] = [];
+  if (b.byType.price > 0) parts.push(`${b.byType.price} ${pluralize(b.byType.price, "mudança de preço", "mudanças de preço")}`);
+  if (b.byType.added > 0) parts.push(`${b.byType.added} ${pluralize(b.byType.added, "adicionado", "adicionados")}`);
+  if (b.byType.removed > 0) parts.push(`${b.byType.removed} ${pluralize(b.byType.removed, "removido", "removidos")}`);
+  if (b.byType.reappeared > 0) parts.push(`${b.byType.reappeared} ${pluralize(b.byType.reappeared, "reapareceu", "reapareceram")}`);
+  return parts.join(", ");
+}
+
 // Exportado separado da função que envia de verdade — permite gerar e
 // revisar o texto exato (pedido explícito do usuário, "me mostre o texto
 // antes de eu aprovar") sem precisar rodar o envio real toda vez.
@@ -72,12 +96,12 @@ export function buildDigestMessage(
 
   const intro =
     breakdown.length === 1
-      ? `Hoje, ${total} ${pluralize(total, "mudança de preço", "mudanças de preço")} no concorrente que você monitora:`
-      : `Hoje, ${total} mudanças de preço entre os concorrentes que você monitora:`;
+      ? `Hoje, ${total} ${pluralize(total, "mudança", "mudanças")} no concorrente que você monitora:`
+      : `Hoje, ${total} mudanças entre os concorrentes que você monitora:`;
 
   const lines = [...breakdown]
     .sort((a, b) => b.changes - a.changes)
-    .map((b) => `${b.competitorName}: ${b.changes} ${pluralize(b.changes, "mudança", "mudanças")}`);
+    .map((b) => `${b.competitorName}: ${describeCompetitorBreakdown(b)}`);
 
   const message = `${intro}\n\n${lines.join("\n")}\n\nVeja o relatório completo de hoje: ${reportLink}\n\nObrigado por usar o Q&A Imob!`;
   return { subject, message };
@@ -154,24 +178,26 @@ export async function sendDailyDigest(digestDate: string = new Date().toISOStrin
   );
   const competitorIdByPropertyId = new Map(properties.map((p) => [p.id, p.competitor_id]));
 
-  const changesToday = await fetchAllPaginated<{ property_id: string }>((offset) =>
+  const changesToday = await fetchAllPaginated<{ property_id: string; change_type: keyof ChangeTypeCounts }>((offset) =>
     supabase
       .from("property_changes")
-      .select("property_id")
+      .select("property_id, change_type")
       .gte("detected_at", dayStart)
       .lt("detected_at", dayEnd)
       .range(offset, offset + FETCH_PAGE_SIZE - 1)
   );
 
-  // account_id -> competitor_id -> contagem
-  const countsByAccount = new Map<string, Map<string, number>>();
+  // account_id -> competitor_id -> contagem por change_type
+  const countsByAccount = new Map<string, Map<string, ChangeTypeCounts>>();
   for (const change of changesToday) {
     const competitorId = competitorIdByPropertyId.get(change.property_id);
     const competitor = competitorId ? competitorById.get(competitorId) : undefined;
     if (!competitor) continue; // property/competitor removido — ignora, não conta pra ninguém
 
-    const accountCounts = countsByAccount.get(competitor.account_id) ?? new Map<string, number>();
-    accountCounts.set(competitorId!, (accountCounts.get(competitorId!) ?? 0) + 1);
+    const accountCounts = countsByAccount.get(competitor.account_id) ?? new Map<string, ChangeTypeCounts>();
+    const competitorCounts = accountCounts.get(competitorId!) ?? emptyChangeTypeCounts();
+    competitorCounts[change.change_type]++;
+    accountCounts.set(competitorId!, competitorCounts);
     countsByAccount.set(competitor.account_id, accountCounts);
   }
 
@@ -205,10 +231,11 @@ export async function sendDailyDigest(digestDate: string = new Date().toISOStrin
       continue;
     }
 
-    const breakdown: CompetitorBreakdownEntry[] = [...accountCounts.entries()].map(([competitorId, changes]) => ({
+    const breakdown: CompetitorBreakdownEntry[] = [...accountCounts.entries()].map(([competitorId, byType]) => ({
       competitorId,
       competitorName: competitorById.get(competitorId)?.name ?? "Concorrente removido",
-      changes,
+      changes: byType.price + byType.added + byType.removed + byType.reappeared,
+      byType,
     }));
     const totalChanges = breakdown.reduce((sum, b) => sum + b.changes, 0);
 

@@ -75,16 +75,24 @@ export function ReportTable({
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">{row.externalId}</td>
                   <td className="px-3 py-2 text-xs text-foreground print:!text-black">
-                    {row.type === "preco" ? "Preço" : row.newStatus === "possivelmente_vendido" ? "Possiv. vendido" : "Reapareceu"}
+                    {row.changeType === "price"
+                      ? "Preço"
+                      : row.changeType === "added"
+                        ? "Adicionado"
+                        : row.changeType === "removed"
+                          ? "Possiv. vendido"
+                          : "Reapareceu"}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs print:!text-black">
-                    {row.type === "preco" ? (
+                    {row.changeType === "price" ? (
                       <span className="flex items-center gap-1.5">
                         <span className="text-muted line-through print:!text-black">{formatBRL(row.oldPrice)}</span>
                         <span className="text-muted print:!text-black">→</span>
                         <span className="font-semibold text-signal-text print:!text-black">{formatBRL(row.newPrice)}</span>
                         <span className="text-muted print:!text-black">({formatDelta(row.oldPrice, row.newPrice)})</span>
                       </span>
+                    ) : row.changeType === "added" ? (
+                      <span className="font-semibold text-signal-text print:!text-black">{formatBRL(row.newPrice)}</span>
                     ) : (
                       "—"
                     )}

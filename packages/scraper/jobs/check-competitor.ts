@@ -22,14 +22,21 @@ async function notifyPropertyChanges(
   changes: DetectedChange[]
 ): Promise<void> {
   for (const change of changes) {
-    if (change.newStatus === "possivelmente_vendido") {
+    if (change.changeType === "added") {
+      await createNotification(supabase, {
+        accountId,
+        propertyChangeId: change.propertyChangeId,
+        title: `Novo imóvel: ${competitorName}`,
+        message: `O imóvel ${change.externalId} apareceu na listagem de "${competitorName}" por ${formatBRL(change.newPrice)}.`,
+      });
+    } else if (change.changeType === "removed") {
       await createNotification(supabase, {
         accountId,
         propertyChangeId: change.propertyChangeId,
         title: `Imóvel possivelmente vendido: ${competitorName}`,
         message: `O imóvel ${change.externalId} não aparece mais na listagem de "${competitorName}" — pode ter sido vendido ou removido.`,
       });
-    } else if (change.newStatus === "ativo" && change.oldStatus === "possivelmente_vendido") {
+    } else if (change.changeType === "reappeared") {
       await createNotification(supabase, {
         accountId,
         propertyChangeId: change.propertyChangeId,
@@ -59,17 +66,33 @@ const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 // 0 imóveis capturados, ou a maioria sem preço.
 const DEGRADED_MIN_MISSING_PRICE_RATIO = 0.5;
 
+export interface ChangesByType {
+  price: number;
+  added: number;
+  removed: number;
+  reappeared: number;
+}
+
 export interface CheckCompetitorResult {
   competitorId: string;
   success: boolean;
   propertiesCaptured: number;
   changesDetected: number;
+  changesByType: ChangesByType;
   stoppedEarlyDueToError: boolean;
   pausedByCircuitBreaker: boolean;
   reactivatedAfterSuccess: boolean;
   configMarkedDegraded: boolean;
   errorMessage: string | null;
   properties: ExtractedProperty[];
+}
+
+const EMPTY_CHANGES_BY_TYPE: ChangesByType = { price: 0, added: 0, removed: 0, reappeared: 0 };
+
+function countChangesByType(changes: DetectedChange[]): ChangesByType {
+  const counts = { ...EMPTY_CHANGES_BY_TYPE };
+  for (const change of changes) counts[change.changeType]++;
+  return counts;
 }
 
 async function recordRun(supabase: SupabaseClient, run: ScraperRunInsert): Promise<void> {
@@ -150,6 +173,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       success: false,
       propertiesCaptured: 0,
       changesDetected: 0,
+      changesByType: EMPTY_CHANGES_BY_TYPE,
       stoppedEarlyDueToError: false,
       pausedByCircuitBreaker: false,
       reactivatedAfterSuccess: false,
@@ -184,14 +208,18 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     (propertiesCaptured === 0 || result!.cardsWithoutPrice / propertiesCaptured >= DEGRADED_MIN_MISSING_PRICE_RATIO);
 
   // Só compara/persiste quando a extração de fato rodou (mesmo que parcial
-  // — os imóveis que FORAM capturados continuam válidos pra comparação). A
-  // inferência por ausência ("sumiu = possivelmente_vendido") fica bloqueada
-  // dentro de persistAndDetectChanges tanto em falha de rede quanto em
-  // config degradado — nos dois casos, "não apareceu nesta captura" não
-  // quer dizer "não existe mais no site", só que não confiamos nesta leitura.
+  // — os imóveis que FORAM capturados continuam válidos pra comparação).
+  // stoppedEarlyDueToError e configLooksDegraded viajam SEPARADOS agora
+  // (antes eram um só booleano pré-combinado) — dentro de
+  // persistAndDetectChanges, "removido" (inferência por ausência) continua
+  // bloqueado pelos dois motivos, mas "adicionado" (inferência por
+  // presença) só é bloqueado por configLooksDegraded: falha de rede não
+  // torna o que FOI capturado menos confiável, mas dado suspeito (seletor
+  // possivelmente quebrado) sim.
   const { changesDetected, changes } = result
     ? await persistAndDetectChanges(supabase, competitorId, result.properties, {
-        stoppedEarlyDueToError: stoppedEarlyDueToError || configLooksDegraded,
+        stoppedEarlyDueToError,
+        configLooksDegraded,
       })
     : { changesDetected: 0, changes: [] };
 
@@ -251,6 +279,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     success,
     propertiesCaptured,
     changesDetected,
+    changesByType: countChangesByType(changes),
     stoppedEarlyDueToError,
     pausedByCircuitBreaker,
     reactivatedAfterSuccess,

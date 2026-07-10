@@ -15,8 +15,6 @@ const itemVariants = {
 };
 
 function FeedRow({ item }: { item: FeedItem }) {
-  const isStatusChange = item.newStatus !== null;
-
   return (
     <motion.li variants={itemVariants} className="flex items-center justify-between gap-4 border-b border-surface-border px-4 py-3 last:border-b-0">
       <div className="min-w-0">
@@ -25,9 +23,14 @@ function FeedRow({ item }: { item: FeedItem }) {
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">
-        {isStatusChange ? (
+        {item.changeType === "added" ? (
+          <span className="flex items-center gap-1.5">
+            <span className="rounded-full bg-signal/15 px-2 py-0.5 font-mono text-xs font-semibold text-signal-text">Adicionado</span>
+            <span className="font-mono text-sm font-semibold text-foreground">{formatBRL(item.newPrice)}</span>
+          </span>
+        ) : item.changeType === "removed" || item.changeType === "reappeared" ? (
           <span className="rounded-full bg-signal/15 px-2 py-0.5 font-mono text-xs font-semibold text-signal-text">
-            {item.newStatus === "possivelmente_vendido" ? "Possivelmente vendido" : "Reapareceu"}
+            {item.changeType === "removed" ? "Possivelmente vendido" : "Reapareceu"}
           </span>
         ) : (
           <span className="flex items-center gap-1.5 font-mono text-sm">
@@ -47,7 +50,7 @@ function FeedRow({ item }: { item: FeedItem }) {
 export function ChangesFeed({ feed }: { feed: FeedItem[] }) {
   return (
     <div className="rounded-lg border border-surface-border bg-surface">
-      <h3 className="border-b border-surface-border px-4 py-3 text-sm font-medium text-muted">Últimas mudanças de preço</h3>
+      <h3 className="border-b border-surface-border px-4 py-3 text-sm font-medium text-muted">Últimas mudanças</h3>
       {feed.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted">Nenhuma mudança detectada nos últimos 7 dias.</p>
       ) : (

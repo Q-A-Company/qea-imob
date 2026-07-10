@@ -1,10 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import type { PropertyChangeType } from "@/lib/supabase/types";
 
 export interface FeedItem {
   id: string;
   competitorName: string;
   externalId: string;
+  changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
   oldStatus: string | null;
@@ -130,7 +132,7 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
   const sinceIso = new Date(Date.now() - SEVEN_DAYS_MS).toISOString();
   const { data: changes, error: changesError } = await supabase
     .from("property_changes")
-    .select("id, property_id, old_price, new_price, old_status, new_status, detected_at")
+    .select("id, property_id, change_type, old_price, new_price, old_status, new_status, detected_at")
     .gte("detected_at", sinceIso)
     .order("detected_at", { ascending: false });
   if (changesError) throw new Error(`Falha ao buscar mudanças: ${changesError.message}`);
@@ -173,6 +175,7 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
           id: change.id,
           competitorName: competitorMeta.get(competitorId)?.name ?? "Concorrente removido",
           externalId: property.external_id,
+          changeType: change.change_type,
           oldPrice: change.old_price,
           newPrice: change.new_price,
           oldStatus: change.old_status,

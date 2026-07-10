@@ -17,6 +17,7 @@ export type SiteConfigStatus = "ativo" | "degradado" | "aprendendo" | "pendente_
 export type PriceStatus = "valor" | "sob_consulta";
 export type PropertyStatus = "ativo" | "possivelmente_vendido";
 export type ScraperRunType = "checagem" | "recalibracao";
+export type PropertyChangeType = "price" | "added" | "removed" | "reappeared";
 
 // postgrest-js exige que cada tabela tenha `Relationships` e que o schema
 // tenha `Views`/`Functions` (mesmo vazios) para resolver a inferência de
@@ -140,6 +141,7 @@ export interface Database {
         Row: {
           id: string;
           property_id: string;
+          change_type: PropertyChangeType;
           old_price: number | null;
           new_price: number | null;
           old_status: string | null;
@@ -149,6 +151,7 @@ export interface Database {
         Insert: {
           id?: string;
           property_id: string;
+          change_type: PropertyChangeType;
           old_price?: number | null;
           new_price?: number | null;
           old_status?: string | null;

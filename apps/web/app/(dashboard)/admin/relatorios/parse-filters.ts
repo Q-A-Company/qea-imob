@@ -30,8 +30,8 @@ export function parseFilters(searchParams: SearchParams): ReportFilters {
   const competitorIds = competitorsRaw ? competitorsRaw.split(",").filter(Boolean) : null;
 
   const typesRaw = get("types");
-  const parsedTypes = typesRaw ? (typesRaw.split(",").filter(Boolean) as ChangeType[]) : (["preco", "disponibilidade"] as ChangeType[]);
-  const types = parsedTypes.length > 0 ? parsedTypes : (["preco", "disponibilidade"] as ChangeType[]);
+  const parsedTypes = typesRaw ? (typesRaw.split(",").filter(Boolean) as ChangeType[]) : (["preco", "adicionado", "disponibilidade"] as ChangeType[]);
+  const types = parsedTypes.length > 0 ? parsedTypes : (["preco", "adicionado", "disponibilidade"] as ChangeType[]);
 
   const direction = (get("direction") as Direction) || "ambos";
   const status = (get("status") as PropertyStatusFilter) || "ambos";

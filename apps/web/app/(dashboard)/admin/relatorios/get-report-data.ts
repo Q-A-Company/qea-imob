@@ -1,10 +1,23 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import type { PropertyChangeType } from "@/lib/supabase/types";
 
 export const PAGE_SIZE = 50;
 const PROPERTIES_FETCH_PAGE_SIZE = 1000;
 
-export type ChangeType = "preco" | "disponibilidade";
+// Categorias de FILTRO (3-way, decisão confirmada com o usuário) — não o
+// mesmo conjunto de valores de `change_type` no banco (4 valores: price/
+// added/removed/reappeared). "disponibilidade" aqui continua agrupando
+// removed+reappeared, como já era — são duas faces do mesmo evento
+// (disponibilidade de um imóvel já conhecido oscilando), e quem filtra
+// "Disponibilidade" normalmente quer ver os dois juntos. "Adicionado" é
+// conceitualmente diferente (inventário novo, não mudança de estado de algo
+// já conhecido) e não participa de direction/minVariation (que só fazem
+// sentido comparando old_price/new_price de um imóvel já conhecido) — por
+// isso ganhou o próprio filtro em vez de virar "disponibilidade" também. A
+// tabela (report-table.tsx) continua distinguindo removed de reappeared
+// visualmente, só não como filtro separado.
+export type ChangeType = "preco" | "adicionado" | "disponibilidade";
 export type Direction = "aumento" | "reducao" | "ambos";
 export type PropertyStatusFilter = "ativo" | "possivelmente_vendido" | "ambos";
 
@@ -27,7 +40,7 @@ export interface ReportRow {
   competitorName: string;
   competitorAbbreviation: string;
   externalId: string;
-  type: ChangeType;
+  changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
   oldStatus: string | null;
@@ -111,22 +124,24 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   }
 
   // Sem .in("property_id", ...) — ver comentário grande acima da função.
-  // Filtros de coluna simples só (data, tipo); RLS restringe à conta.
+  // Filtros de coluna simples só (data, change_type); RLS restringe à conta.
   let changesQuery = supabase
     .from("property_changes")
-    .select("id, property_id, old_price, new_price, old_status, new_status, detected_at");
+    .select("id, property_id, change_type, old_price, new_price, old_status, new_status, detected_at");
 
   if (filters.from) changesQuery = changesQuery.gte("detected_at", `${filters.from}T00:00:00.000Z`);
   if (filters.to) changesQuery = changesQuery.lte("detected_at", `${filters.to}T23:59:59.999Z`);
 
-  // Tipo: "preço" = old_status/new_status nulos (ver persist-and-compare.ts);
-  // "disponibilidade" = new_status preenchido.
-  const wantsPrice = filters.types.includes("preco");
-  const wantsAvailability = filters.types.includes("disponibilidade");
-  if (wantsPrice && !wantsAvailability) {
-    changesQuery = changesQuery.is("new_status", null);
-  } else if (wantsAvailability && !wantsPrice) {
-    changesQuery = changesQuery.not("new_status", "is", null);
+  // Categoria de filtro -> change_type real no banco (ver comentário no
+  // type ChangeType acima). Só filtra na query quando a seleção é um
+  // SUBCONJUNTO das 3 categorias — com as 3 marcadas, equivale a "sem
+  // filtro", igual já era antes.
+  const wantedChangeTypes: PropertyChangeType[] = [];
+  if (filters.types.includes("preco")) wantedChangeTypes.push("price");
+  if (filters.types.includes("adicionado")) wantedChangeTypes.push("added");
+  if (filters.types.includes("disponibilidade")) wantedChangeTypes.push("removed", "reappeared");
+  if (wantedChangeTypes.length > 0 && wantedChangeTypes.length < 4) {
+    changesQuery = changesQuery.in("change_type", wantedChangeTypes);
   }
 
   changesQuery = changesQuery.order("detected_at", { ascending: filters.sort === "asc" });
@@ -148,7 +163,7 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
       competitorName: meta?.name ?? "Concorrente removido",
       competitorAbbreviation: meta?.abbreviation ?? "???",
       externalId: property.external_id,
-      type: change.new_status !== null ? "disponibilidade" : "preco",
+      changeType: change.change_type,
       oldPrice: change.old_price,
       newPrice: change.new_price,
       oldStatus: change.old_status,
@@ -164,8 +179,9 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     ? candidateRows
     : candidateRows.filter((row) => {
         // direction/minVariation só valem pra mudança de preço —
-        // disponibilidade fica excluída automaticamente, avisado na UI.
-        if (row.type !== "preco" || row.oldPrice === null || row.newPrice === null) return false;
+        // adicionado/disponibilidade ficam excluídos automaticamente,
+        // avisado na UI.
+        if (row.changeType !== "price" || row.oldPrice === null || row.newPrice === null) return false;
 
         if (filters.direction === "aumento" && row.newPrice <= row.oldPrice) return false;
         if (filters.direction === "reducao" && row.newPrice >= row.oldPrice) return false;

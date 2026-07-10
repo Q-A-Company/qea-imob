@@ -8,7 +8,9 @@ function describeFilters(filters: ReportFilters, competitorLabel: string): strin
   const lines: string[] = [];
   lines.push(`Concorrentes: ${competitorLabel}`);
   lines.push(`Período: ${filters.from ? formatDate(filters.from) : "sem início"} até ${filters.to ? formatDate(filters.to) : "sem fim"}`);
-  lines.push(`Tipo: ${filters.types.map((t) => (t === "preco" ? "Preço" : "Disponibilidade")).join(" + ")}`);
+  lines.push(
+    `Tipo: ${filters.types.map((t) => (t === "preco" ? "Preço" : t === "adicionado" ? "Adicionado" : "Disponibilidade")).join(" + ")}`
+  );
   lines.push(`Direção: ${filters.direction === "ambos" ? "Ambas" : filters.direction === "aumento" ? "Aumento" : "Redução"}`);
   if (filters.minVariation) {
     lines.push(`Variação mínima: ${filters.minVariation.value}${filters.minVariation.unit === "percent" ? "%" : " R$"}`);

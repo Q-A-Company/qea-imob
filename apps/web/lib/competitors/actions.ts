@@ -12,6 +12,7 @@ export interface CheckCompetitorNowState {
     success: boolean;
     propertiesCaptured: number;
     changesDetected: number;
+    changesByType: { price: number; added: number; removed: number; reappeared: number };
     stoppedEarlyDueToError: boolean;
     pausedByCircuitBreaker: boolean;
     reactivatedAfterSuccess: boolean;
@@ -61,6 +62,7 @@ export async function checkCompetitorNowAction(
         success: result.success,
         propertiesCaptured: result.propertiesCaptured,
         changesDetected: result.changesDetected,
+        changesByType: result.changesByType,
         stoppedEarlyDueToError: result.stoppedEarlyDueToError,
         pausedByCircuitBreaker: result.pausedByCircuitBreaker,
         reactivatedAfterSuccess: result.reactivatedAfterSuccess,

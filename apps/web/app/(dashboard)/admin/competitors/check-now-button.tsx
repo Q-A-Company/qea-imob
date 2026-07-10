@@ -5,6 +5,23 @@ import { checkCompetitorNowAction, type CheckCompetitorNowState } from "@/lib/co
 
 const initialState: CheckCompetitorNowState = {};
 
+function pluralize(count: number, singular: string, plural: string): string {
+  return count === 1 ? singular : plural;
+}
+
+// "X imóveis capturados" sempre aparece; o resto só entra quando > 0, pra
+// não poluir o caso comum (a maioria das checagens não tem mudança
+// nenhuma). Ordem: preço, adicionados, removidos, reapareceram.
+function formatChangesBreakdown(changesByType: { price: number; added: number; removed: number; reappeared: number }): string {
+  const parts: string[] = [];
+  if (changesByType.price > 0) parts.push(`${changesByType.price} ${pluralize(changesByType.price, "mudança de preço", "mudanças de preço")}`);
+  if (changesByType.added > 0) parts.push(`${changesByType.added} ${pluralize(changesByType.added, "adicionado", "adicionados")}`);
+  if (changesByType.removed > 0) parts.push(`${changesByType.removed} ${pluralize(changesByType.removed, "removido", "removidos")}`);
+  if (changesByType.reappeared > 0)
+    parts.push(`${changesByType.reappeared} ${pluralize(changesByType.reappeared, "reapareceu", "reapareceram")}`);
+  return parts.length > 0 ? parts.join(" · ") : "nenhuma mudança";
+}
+
 export function CheckNowButton({ competitorId }: { competitorId: string }) {
   const [state, formAction, pending] = useActionState(checkCompetitorNowAction, initialState);
 
@@ -34,7 +51,7 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
           }`}
         >
           {state.result.success
-            ? `${state.result.propertiesCaptured} imóveis capturados · ${state.result.changesDetected} mudança(s) detectada(s)${
+            ? `${state.result.propertiesCaptured} imóveis capturados · ${formatChangesBreakdown(state.result.changesByType)}${
                 state.result.stoppedEarlyDueToError ? " (parou cedo por erro)" : ""
               }${state.result.pausedByCircuitBreaker ? " · pausado automaticamente" : ""}${
                 state.result.reactivatedAfterSuccess ? " · reativado" : ""
