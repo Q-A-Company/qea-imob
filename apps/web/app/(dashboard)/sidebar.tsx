@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
@@ -18,14 +19,6 @@ function PulseIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
       <path d="M2 12h4l2.5-7L13 19l2.5-7H22" />
-    </svg>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0">
-      <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v5l-1.71 1.71A1 1 0 0 0 4 19.5h16a1 1 0 0 0 .71-1.79Z" />
     </svg>
   );
 }
@@ -86,12 +79,14 @@ interface NavItem {
 }
 
 // Concorrentes/Configurações são funções de gestão puras — sem versão
-// somente-leitura, ficam admin-only (Etapa 10). Painel/Notificações/
-// Histórico/Relatórios (Etapa 11) são as mesmas informações pros dois
-// roles, só que em rotas /admin/* ou /user/* separadas — ver o trade-off
-// registrado no README (rotas espelhadas, não uma rota só com `if` de
-// role: mantém /admin/* como invariante "só Admin entra", auditável sem
-// abrir cada página).
+// somente-leitura, ficam admin-only (Etapa 10). Painel/Histórico/Relatórios
+// (Etapa 11) são as mesmas informações pros dois roles, só que em rotas
+// /admin/* ou /user/* separadas — ver o trade-off registrado no README
+// (rotas espelhadas, não uma rota só com `if` de role: mantém /admin/*
+// como invariante "só Admin entra", auditável sem abrir cada página).
+// Notificações NÃO tem item aqui de propósito — só é alcançável pelo sino
+// no header (ver notification-bell-client.tsx), pra não duplicar acesso à
+// mesma informação em dois lugares do chrome.
 function buildNavItems(role: UserRole): NavItem[] {
   const base = role === "usuario" ? "/user" : "/admin";
   const items: NavItem[] = [
@@ -102,7 +97,6 @@ function buildNavItems(role: UserRole): NavItem[] {
       href: ROLE_HOME[role],
       roles: ["admin", "gerente", "usuario", "superadmin"],
     },
-    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: `${base}/notifications`, roles: ["admin", "gerente", "usuario"] },
     { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
     { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "gerente", "usuario"] },
     { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin", "gerente"] },
@@ -133,24 +127,48 @@ function blurOnMouseClick(e: React.MouseEvent<HTMLAnchorElement>) {
   }
 }
 
-export function Sidebar({ role }: { role: UserRole }) {
+export function Sidebar({
+  role,
+  pinned,
+  onTogglePin,
+}: {
+  role: UserRole;
+  pinned: boolean;
+  onTogglePin: () => void;
+}) {
   const pathname = usePathname();
   const items = buildNavItems(role);
 
+  // Quando fixa (pinned), a label não depende de hover: sempre visível.
+  const labelOpacityClass = pinned
+    ? "opacity-100"
+    : "opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100";
+
   return (
     <>
-      {/* Desktop: overlay que expande no hover/foco — nunca empurra o
-          conteúdo, porque <main> sempre reserva a mesma margem (a largura
-          colapsada), independente do estado da sidebar. */}
+      {/* Desktop: overlay que expande no hover/foco (ou fica sempre expandida
+          se pinned) — nunca empurra o conteúdo por si só; o layout.tsx é quem
+          decide a margem reservada, olhando o mesmo cookie no servidor. */}
       <nav
         aria-label="Navegação principal"
-        className="print:hidden group fixed inset-y-0 left-0 z-30 hidden w-16 flex-col gap-1 overflow-hidden border-r border-surface-border bg-surface py-4 transition-[width] duration-200 ease-out hover:w-56 focus-within:w-56 md:flex"
+        className={`print:hidden group fixed inset-y-0 left-0 z-30 hidden flex-col gap-1 overflow-hidden border-r border-surface-border bg-surface py-4 transition-[width] duration-200 ease-out md:flex ${
+          pinned ? "w-56" : "w-16 hover:w-56 focus-within:w-56"
+        }`}
       >
-        <div className="mb-3 flex items-center gap-3 px-3 text-signal-text">
-          <PulseIcon />
-          <span className="whitespace-nowrap text-sm font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-            Q&amp;A Imob
-          </span>
+        <div className="mb-3 flex items-center justify-between gap-2 px-3 text-signal-text">
+          <div className="flex items-center gap-3">
+            <PulseIcon />
+            <span className={`whitespace-nowrap text-sm font-semibold ${labelOpacityClass}`}>Q&amp;A Imob</span>
+          </div>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            aria-label={pinned ? "Recolher menu" : "Fixar menu expandido"}
+            aria-pressed={pinned}
+            className={`shrink-0 rounded-md p-1 text-muted hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${labelOpacityClass}`}
+          >
+            {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </button>
         </div>
         <ul className="flex flex-col gap-1 px-2">
           {items.map((item) => {
@@ -165,9 +183,7 @@ export function Sidebar({ role }: { role: UserRole }) {
                   }`}
                 >
                   <item.icon />
-                  <span className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                    {item.label}
-                  </span>
+                  <span className={labelOpacityClass}>{item.label}</span>
                 </Link>
               </li>
             );
