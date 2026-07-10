@@ -19,12 +19,14 @@ export interface Database {
           id: string;
           name: string;
           active: boolean;
+          internal_notes: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           active?: boolean;
+          internal_notes?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;

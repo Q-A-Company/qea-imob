@@ -2,17 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { UserRole } from "@/lib/supabase/types";
 
-// Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
-// tem "server-only" no topo — importar aqui quebraria o build do client
-// component. É só um mapa de 2 linhas, não vale a pena reestruturar por isso.
-const ROLE_HOME: Record<UserRole, string> = {
-  admin: "/admin",
-  usuario: "/user",
-  superadmin: "/superadmin",
-};
-
+// Ícones duplicados de (dashboard)/sidebar.tsx de propósito, não
+// importados/exportados de lá — essa sidebar navega por accountId (rota
+// escoped a uma conta específica que o SuperAdmin está visualizando), não
+// por role. É um conceito de navegação diferente o suficiente (itens e
+// hrefs não têm nada em comum com buildNavItems) que acoplar os dois só
+// pra reaproveitar 4 SVGs pequenos não compensa — mesmo raciocínio já usado
+// pra duplicar ROLE_HOME entre dal.ts e sidebar.tsx.
 function PulseIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
@@ -21,19 +18,11 @@ function PulseIcon() {
   );
 }
 
-function BellIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0">
-      <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v5l-1.71 1.71A1 1 0 0 0 4 19.5h16a1 1 0 0 0 .71-1.79Z" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
+function ReportIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3.5 2" />
+      <path d="M9 3h6l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+      <path d="M9 12h6M9 16h6M9 8h2" />
     </svg>
   );
 }
@@ -48,6 +37,16 @@ function TargetIcon() {
   );
 }
 
+function UsersIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
@@ -57,11 +56,11 @@ function GearIcon() {
   );
 }
 
-function ReportIcon() {
+function AlertIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <path d="M9 3h6l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
-      <path d="M9 12h6M9 16h6M9 8h2" />
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <path d="M12 9v4M12 17h.01" />
     </svg>
   );
 }
@@ -71,58 +70,41 @@ interface NavItem {
   label: string;
   icon: () => React.ReactElement;
   href: string;
-  roles: UserRole[];
 }
 
-// Concorrentes/Configurações são funções de gestão puras — sem versão
-// somente-leitura, ficam admin-only (Etapa 10). Painel/Notificações/
-// Histórico/Relatórios (Etapa 11) são as mesmas informações pros dois
-// roles, só que em rotas /admin/* ou /user/* separadas — ver o trade-off
-// registrado no README (rotas espelhadas, não uma rota só com `if` de
-// role: mantém /admin/* como invariante "só Admin entra", auditável sem
-// abrir cada página).
-function buildNavItems(role: UserRole): NavItem[] {
-  const base = role === "usuario" ? "/user" : "/admin";
-  const items: NavItem[] = [
-    {
-      key: "painel",
-      label: role === "superadmin" ? "Clientes" : "Painel",
-      icon: PulseIcon,
-      href: ROLE_HOME[role],
-      roles: ["admin", "usuario", "superadmin"],
-    },
-    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: `${base}/notifications`, roles: ["admin", "usuario"] },
-    { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "usuario"] },
-    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "usuario"] },
-    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin"] },
-    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin"] },
+function buildAccountNavItems(accountId: string): NavItem[] {
+  const base = `/superadmin/accounts/${accountId}`;
+  return [
+    { key: "painel", label: "Painel", icon: PulseIcon, href: base },
+    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios` },
+    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: `${base}/competitors` },
+    { key: "usuarios", label: "Usuários", icon: UsersIcon, href: `${base}/users` },
+    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: `${base}/settings` },
+    { key: "erros", label: "Relatório de erros", icon: AlertIcon, href: `${base}/errors` },
   ];
-  return items.filter((item) => item.roles.includes(role));
 }
 
-// event.detail é a contagem de cliques do mouse — 0 quando o link é ativado
-// por teclado (Enter/Espaço), 1+ quando é clique de mouse de verdade. Só tira
-// o foco no caso de mouse: senão, depois de clicar, o link clicado continua
-// focado, focus-within continua verdadeiro, e a sidebar fica presa expandida
-// até o usuário clicar em outro lugar da tela — mesmo com o mouse já longe
-// do menu. Sem afetar Tab: ali detail é sempre 0.
+// event.detail é a contagem de cliques do mouse — mesma lógica de
+// (dashboard)/sidebar.tsx (blurOnMouseClick), evita a sidebar ficar presa
+// expandida por :focus-within depois de um clique de mouse.
 function blurOnMouseClick(e: React.MouseEvent<HTMLAnchorElement>) {
   if (e.detail !== 0) {
     e.currentTarget.blur();
   }
 }
 
-export function Sidebar({ role }: { role: UserRole }) {
+// Mesma estrutura visual/interação de (dashboard)/sidebar.tsx (overlay que
+// expande no hover/foco, nunca empurra o conteúdo) — só os itens mudam:
+// aqui a navegação é escopada a uma conta específica (Painel/Relatórios/
+// Concorrentes/Usuários/Configurações/Relatório de erros), não por role.
+export function AccountSidebar({ accountId }: { accountId: string }) {
   const pathname = usePathname();
-  const items = buildNavItems(role);
+  const items = buildAccountNavItems(accountId);
 
   return (
     <>
-      {/* Desktop: overlay que expande no hover/foco — nunca empurra o
-          conteúdo, porque <main> sempre reserva a mesma margem (a largura
-          colapsada), independente do estado da sidebar. */}
       <nav
-        aria-label="Navegação principal"
+        aria-label="Navegação da conta"
         className="print:hidden group fixed inset-y-0 left-0 z-30 hidden w-16 flex-col gap-1 overflow-hidden border-r border-surface-border bg-surface py-4 transition-[width] duration-200 ease-out hover:w-56 focus-within:w-56 md:flex"
       >
         <div className="mb-3 flex items-center gap-3 px-3 text-signal-text">
@@ -154,10 +136,8 @@ export function Sidebar({ role }: { role: UserRole }) {
         </ul>
       </nav>
 
-      {/* Mobile: bottom nav fixo, só ícones — mais natural que hambúrguer
-          pra 2-5 itens, e não depende de hover (dispositivo de toque). */}
       <nav
-        aria-label="Navegação principal"
+        aria-label="Navegação da conta"
         className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-surface py-1 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
