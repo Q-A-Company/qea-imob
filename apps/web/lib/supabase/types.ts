@@ -52,6 +52,9 @@ export interface Database {
           role: UserRole;
           full_name: string | null;
           email_notifications_enabled: boolean;
+          birth_date: string | null;
+          block_reason: string | null;
+          avatar_url: string | null;
           created_at: string;
         };
         Insert: {
@@ -60,6 +63,9 @@ export interface Database {
           role: UserRole;
           full_name?: string | null;
           email_notifications_enabled?: boolean;
+          birth_date?: string | null;
+          block_reason?: string | null;
+          avatar_url?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
@@ -141,6 +147,7 @@ export interface Database {
         Row: {
           id: string;
           property_id: string;
+          scraper_run_id: string | null;
           change_type: PropertyChangeType;
           old_price: number | null;
           new_price: number | null;
@@ -151,6 +158,7 @@ export interface Database {
         Insert: {
           id?: string;
           property_id: string;
+          scraper_run_id?: string | null;
           change_type: PropertyChangeType;
           old_price?: number | null;
           new_price?: number | null;
@@ -206,6 +214,7 @@ export interface Database {
           changes_detected: number;
           error_message: string | null;
           stopped_early_due_to_error: boolean;
+          duration_ms: number | null;
           created_at: string;
         };
         Insert: {
@@ -217,6 +226,7 @@ export interface Database {
           changes_detected?: number;
           error_message?: string | null;
           stopped_early_due_to_error?: boolean;
+          duration_ms?: number | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["scraper_runs"]["Insert"]>;
@@ -256,6 +266,60 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["system_settings"]["Insert"]>;
+      } & NoRelationships;
+      login_audit_log: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          account_id: string | null;
+          logged_in_at: string;
+          ip_address: string | null;
+          user_agent: string | null;
+          browser: string | null;
+          browser_version: string | null;
+          os: string | null;
+          is_mobile: boolean | null;
+          screen_width: number | null;
+          screen_height: number | null;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          account_id?: string | null;
+          logged_in_at?: string;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          browser?: string | null;
+          browser_version?: string | null;
+          os?: string | null;
+          is_mobile?: boolean | null;
+          screen_width?: number | null;
+          screen_height?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["login_audit_log"]["Insert"]>;
+      } & NoRelationships;
+      audit_log: {
+        Row: {
+          id: string;
+          actor_user_id: string | null;
+          account_id: string | null;
+          action_type: string;
+          target_type: string | null;
+          target_id: string | null;
+          details: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_user_id?: string | null;
+          account_id?: string | null;
+          action_type: string;
+          target_type?: string | null;
+          target_id?: string | null;
+          details?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
       } & NoRelationships;
     };
     Views: Record<string, never>;
