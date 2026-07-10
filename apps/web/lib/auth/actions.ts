@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { roleHome } from "@/lib/auth/dal";
+import { recordLoginAudit } from "@/lib/audit/login-audit";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export interface LoginState {
   error?: string;
@@ -60,11 +62,40 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     }
   }
 
+  // Depois de todas as checagens (banido, conta ativa) — só registra login
+  // que de fato vai completar. Duas tabelas, dois propósitos: login_audit_log
+  // é o forense (IP/dispositivo/tela, aba "Acessos"); audit_log é a entrada
+  // genérica na timeline de ações (aba "Histórico"), ao lado de qualquer
+  // outra ação do usuário. As duas são best-effort (nunca bloqueiam o login).
+  await recordLoginAudit(data.user.id, profile.account_id, formData);
+  await logAuditEvent({
+    actorUserId: data.user.id,
+    accountId: profile.account_id,
+    actionType: "login",
+    targetType: "user",
+    targetId: data.user.id,
+  });
+
   redirect(roleHome(profile.role));
 }
 
 export async function logout() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: profile } = await supabase.from("profiles").select("account_id").eq("id", user.id).single();
+    await logAuditEvent({
+      actorUserId: user.id,
+      accountId: profile?.account_id ?? null,
+      actionType: "logout",
+      targetType: "user",
+      targetId: user.id,
+    });
+  }
+
   await supabase.auth.signOut();
   redirect("/login");
 }

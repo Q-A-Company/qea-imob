@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { login, type LoginState } from "@/lib/auth/actions";
 
 const initialState: LoginState = {};
@@ -8,8 +8,23 @@ const initialState: LoginState = {};
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
 
+  // Resolução de tela só existe no navegador — não tem como o servidor
+  // capturar isso sozinho. Campo oculto preenchido via JS antes do submit
+  // (a alternativa seria uma chamada separada depois do login bem-sucedido,
+  // mas isso arrisca perder o dado se o usuário navegar rápido demais antes
+  // dela completar; um campo oculto viaja garantido junto do POST de login).
+  const [screenWidth, setScreenWidth] = useState<number | null>(null);
+  const [screenHeight, setScreenHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    setScreenWidth(window.screen.width);
+    setScreenHeight(window.screen.height);
+  }, []);
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="screenWidth" value={screenWidth ?? ""} />
+      <input type="hidden" name="screenHeight" value={screenHeight ?? ""} />
       <div className="flex flex-col gap-1">
         <label htmlFor="email" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
           E-mail

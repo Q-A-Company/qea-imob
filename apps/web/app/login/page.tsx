@@ -16,6 +16,13 @@ export default async function LoginPage() {
           Entre com sua conta para continuar.
         </p>
         <LoginForm />
+        {/* Transparência pra quem usa o sistema (funcionários da empresa
+            cliente) — pedido explícito: acesso é monitorado por motivo de
+            segurança interna, e isso precisa ser visível na tela de login,
+            não só documentado em algum lugar que ninguém lê. */}
+        <p className="mt-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
+          Por segurança, os acessos a este sistema são registrados (IP, dispositivo e horário).
+        </p>
       </div>
     </main>
   );
