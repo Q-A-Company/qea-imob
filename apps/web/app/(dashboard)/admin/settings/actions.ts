@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export interface UpdateNotificationChannelState {
   error?: string;
@@ -37,6 +38,13 @@ export async function updateNotificationChannelAction(
   );
   if (error) return { error: `Falha ao salvar: ${error.message}` };
 
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId,
+    actionType: "settings_updated",
+    targetType: "notification_settings",
+    details: { channel, enabled },
+  });
   revalidatePath("/admin/settings");
 
   // Aviso combinado antes: ligar e-mail sem RESEND_API_KEY/RESEND_FROM_EMAIL

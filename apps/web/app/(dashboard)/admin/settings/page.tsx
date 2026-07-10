@@ -14,7 +14,11 @@ export default async function SettingsPage() {
         <p className="mt-1 text-sm text-muted">Canais de notificação da sua conta.</p>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Canais de notificação da conta</h2>
+          <p className="mt-1 text-xs text-muted">Vale pra todo mundo da conta — Admin, Gerente e Corretor.</p>
+        </div>
         <NotificationChannelToggle
           channel="site"
           label="Sino do site"
@@ -27,13 +31,15 @@ export default async function SettingsPage() {
           description="Um e-mail por dia, agregando as mudanças de preço do dia — não um e-mail por mudança."
           initialEnabled={settings.emailEnabled}
         />
-      </div>
+      </section>
 
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">Sua preferência pessoal</h2>
-        <p className="mt-1 mb-3 text-xs text-muted">Independente do que está ligado acima pra conta inteira.</p>
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Sua preferência pessoal</h2>
+          <p className="mt-1 text-xs text-muted">Independente do que está ligado acima pra conta inteira.</p>
+        </div>
         <PersonalEmailPreferenceToggle initialEnabled={profile.email_notifications_enabled} />
-      </div>
+      </section>
     </div>
   );
 }
