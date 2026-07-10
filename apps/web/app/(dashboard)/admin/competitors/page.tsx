@@ -26,7 +26,7 @@ function formatDateTime(value: string | null) {
 // nem preview, ver register-form.tsx. Onboarding completo continua um
 // próximo passo natural.
 export default async function CompetitorsPage() {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
   const { data: competitors, error } = await supabase

@@ -9,6 +9,7 @@ import type { UserRole } from "@/lib/supabase/types";
 // component. É só um mapa de 2 linhas, não vale a pena reestruturar por isso.
 const ROLE_HOME: Record<UserRole, string> = {
   admin: "/admin",
+  gerente: "/admin",
   usuario: "/user",
   superadmin: "/superadmin",
 };
@@ -66,6 +67,16 @@ function ReportIcon() {
   );
 }
 
+function UsersIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
 interface NavItem {
   key: string;
   label: string;
@@ -89,13 +100,17 @@ function buildNavItems(role: UserRole): NavItem[] {
       label: role === "superadmin" ? "Clientes" : "Painel",
       icon: PulseIcon,
       href: ROLE_HOME[role],
-      roles: ["admin", "usuario", "superadmin"],
+      roles: ["admin", "gerente", "usuario", "superadmin"],
     },
-    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: `${base}/notifications`, roles: ["admin", "usuario"] },
-    { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "usuario"] },
-    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "usuario"] },
-    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin"] },
-    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin"] },
+    { key: "notificacoes", label: "Notificações", icon: BellIcon, href: `${base}/notifications`, roles: ["admin", "gerente", "usuario"] },
+    { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
+    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "gerente", "usuario"] },
+    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin", "gerente"] },
+    // Gerente também gerencia usuários (só que com teto: não cria/gerencia
+    // outro gerente/admin — restrição aplicada nas Server Actions, ver
+    // lib/users/actions.ts), por isso este item aparece pros dois cargos.
+    { key: "usuarios", label: "Usuários", icon: UsersIcon, href: "/admin/users", roles: ["admin", "gerente"] },
+    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: "/admin/settings", roles: ["admin", "gerente"] },
   ];
   return items.filter((item) => item.roles.includes(role));
 }

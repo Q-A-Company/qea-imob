@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 // natural, mas não fazia parte do que foi pedido nesta etapa (dashboard +
 // estrutura de navegação). Existe pra o item do menu não ficar quebrado.
 export default async function SettingsPage() {
-  await requireRole("admin");
+  await requireRole(["admin", "gerente"]);
 
   return (
     <div>

@@ -19,19 +19,45 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error || !data.user) {
+  if (error) {
+    // user_banned é um ErrorCode distinto de invalid_credentials (confirmado
+    // contra a API real do Supabase Auth) — vale mostrar mensagem clara.
+    // Trade-off aceito conscientemente: o Supabase revela user_banned mesmo
+    // com senha errada, então isso funciona como um oráculo de enumeração
+    // (dá pra descobrir que uma conta existe e está banida sem saber a
+    // senha) — aceitável no porte deste produto (B2B, poucas contas),
+    // decisão confirmada com o usuário antes de implementar.
+    if (error.code === "user_banned") {
+      return { error: "Seu acesso foi desativado. Entre em contato com o administrador da sua empresa." };
+    }
+    return { error: "E-mail ou senha inválidos." };
+  }
+  if (!data.user) {
     return { error: "E-mail ou senha inválidos." };
   }
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, account_id")
     .eq("id", data.user.id)
     .single();
 
   if (!profile) {
     await supabase.auth.signOut();
     return { error: "Usuário sem perfil associado. Contate o administrador." };
+  }
+
+  // accounts.active não bane o usuário no Supabase Auth (só é um campo na
+  // nossa própria tabela) — sem este check, o login teria sucesso e só
+  // getProfile() bloquearia depois, no próximo request, deixando o usuário
+  // preso num loop de redirect sem entender por quê. Checar aqui dá a
+  // mensagem certa na hora.
+  if (profile.account_id) {
+    const { data: account } = await supabase.from("accounts").select("active").eq("id", profile.account_id).single();
+    if (!account?.active) {
+      await supabase.auth.signOut();
+      return { error: "A conta da sua empresa está desativada. Entre em contato com o suporte." };
+    }
   }
 
   redirect(roleHome(profile.role));

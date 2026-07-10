@@ -31,7 +31,7 @@ export async function checkCompetitorNowAction(
   _prevState: CheckCompetitorNowState,
   formData: FormData
 ): Promise<CheckCompetitorNowState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   const competitorId = formData.get("competitorId");
 
   if (typeof competitorId !== "string" || !competitorId) {
@@ -110,7 +110,7 @@ export async function registerCompetitorAction(
   _prevState: RegisterCompetitorState,
   formData: FormData
 ): Promise<RegisterCompetitorState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   if (!profile.account_id) return { error: "Conta inválida" };
 
   const name = String(formData.get("name") ?? "").trim();
@@ -191,7 +191,7 @@ export interface ConfirmSiteConfigState {
 // Ativa um site_config que estava 'pendente_revisao' depois do Admin
 // revisar a prévia de cobertura/confiança na tela.
 export async function confirmSiteConfigAction(siteConfigId: string): Promise<ConfirmSiteConfigState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
   // Duas queries sequenciais, não embed aninhado do PostgREST — o Database
@@ -230,7 +230,7 @@ export interface DiscardSiteConfigState {
 // não só desativa, porque nesse ponto o concorrente ainda não tem nenhum
 // histórico real (properties/scraper_runs) que valha preservar.
 export async function discardSiteConfigAction(competitorId: string): Promise<DiscardSiteConfigState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
   const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
@@ -261,7 +261,7 @@ export async function updateCompetitorStatusAction(
   competitorId: string,
   newStatus: "ativo" | "pausado"
 ): Promise<UpdateCompetitorState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
   const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
@@ -280,7 +280,7 @@ export async function updateCompetitorStatusAction(
 // direto do banco a cada execução (sem cache) — a mudança vale a partir do
 // próximo tick do scheduler, sem precisar reiniciar nada.
 export async function updateCompetitorIntervalAction(competitorId: string, minutes: number): Promise<UpdateCompetitorState> {
-  const profile = await requireRole("admin");
+  const profile = await requireRole(["admin", "gerente"]);
   if (!ALLOWED_POLLING_INTERVALS.includes(minutes as (typeof ALLOWED_POLLING_INTERVALS)[number])) {
     return { error: `Intervalo precisa ser um dos valores permitidos: ${ALLOWED_POLLING_INTERVALS.join(", ")} min` };
   }

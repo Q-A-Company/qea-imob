@@ -1,4 +1,17 @@
-export type UserRole = "superadmin" | "admin" | "usuario";
+export type UserRole = "superadmin" | "admin" | "gerente" | "usuario";
+
+// Rótulos exibidos ao usuário — os valores técnicos de role (banco, rotas
+// /admin/*, requireRole) continuam admin/gerente/usuario, só o texto
+// mudou (pedido do usuário: terminologia de imobiliária). Fonte única
+// porque, ao contrário de ROLE_HOME (duplicado entre dal.ts e sidebar.tsx
+// por causa da fronteira server-only/client), um mapa de rótulo não tem
+// esse problema — server e client components podem importar daqui.
+export const ROLE_LABEL: Record<UserRole, string> = {
+  superadmin: "SuperAdmin",
+  admin: "Diretor / T.I",
+  gerente: "Gerente",
+  usuario: "Corretor",
+};
 export type CompetitorStatus = "ativo" | "pausado" | "erro";
 export type SiteConfigStatus = "ativo" | "degradado" | "aprendendo" | "pendente_revisao";
 export type PriceStatus = "valor" | "sob_consulta";

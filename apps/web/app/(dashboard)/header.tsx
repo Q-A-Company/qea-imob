@@ -2,13 +2,7 @@
 
 import { logout } from "@/lib/auth/actions";
 import { ThemeToggle } from "./theme-toggle";
-import type { UserRole } from "@/lib/supabase/types";
-
-const ROLE_LABEL: Record<UserRole, string> = {
-  superadmin: "SuperAdmin",
-  admin: "Admin",
-  usuario: "Usuário",
-};
+import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
 
 function initials(fullName: string | null): string {
   if (!fullName) return "?";

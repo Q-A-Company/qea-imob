@@ -1,33 +1,26 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { UserRole } from "@/lib/supabase/types";
-
-// Banimento "efetivamente permanente" — a Admin API do Supabase Auth exige
-// uma duração (não tem um "banido para sempre" literal), 'none' reativa.
-// Ver node_modules/@supabase/auth-js: ban_duration em AdminUserAttributes.
-const BAN_FOREVER = "876000h"; // 100 anos
-
-function generateTempPassword(): string {
-  return randomBytes(9).toString("base64url");
-}
+import { BAN_FOREVER, generateTempPassword, wouldRemoveLastAdmin } from "@/lib/users/shared";
+import type { CreateUserState } from "@/lib/users/types";
 
 // Confirma que o profile pertence à conta antes de qualquer mutação — a
 // Admin API do Supabase Auth não sabe nada de account_id, então sem isso um
 // accountId adulterado no client poderia disparar uma ação de gestão (ban,
 // reset de senha, exclusão) num usuário de OUTRA conta. Mesmo padrão de
-// reverificação já usado em lib/competitors/actions.ts.
-async function assertUserBelongsToAccount(userId: string, accountId: string): Promise<{ error?: string }> {
+// reverificação já usado em lib/competitors/actions.ts. Devolve o role atual
+// também — usado pelas chamadas que precisam checar a regra do último admin.
+async function assertUserBelongsToAccount(userId: string, accountId: string): Promise<{ error?: string; role?: UserRole }> {
   const supabase = await createClient();
-  const { data: profile } = await supabase.from("profiles").select("account_id").eq("id", userId).maybeSingle();
+  const { data: profile } = await supabase.from("profiles").select("account_id, role").eq("id", userId).maybeSingle();
   if (!profile || profile.account_id !== accountId) {
     return { error: "Usuário não encontrado ou não pertence a esta conta" };
   }
-  return {};
+  return { role: profile.role };
 }
 
 export interface ActionState {
@@ -56,14 +49,26 @@ export async function updateAccountNotesAction(accountId: string, notes: string)
   return { success: true };
 }
 
-export async function changeUserRoleAction(userId: string, accountId: string, newRole: UserRole): Promise<ActionState> {
+// accountId vem primeiro de propósito (não userId) — é o que permite
+// `changeUserRoleAction.bind(null, accountId)` virar uma função (userId,
+// newRole) => ... passável como prop pra um Client Component. Uma arrow
+// function inline (closure) NÃO pode atravessar a fronteira Server→Client
+// ("Functions cannot be passed directly to Client Components..."); só a
+// própria Server Action ou um .bind() dela pode — e bind só pré-preenche
+// argumentos a partir do início da lista.
+export async function changeUserRoleAction(accountId: string, userId: string, newRole: UserRole): Promise<ActionState> {
   await requireRole("superadmin");
-  if (newRole !== "admin" && newRole !== "usuario") return { error: "Cargo inválido" };
+  if (newRole !== "admin" && newRole !== "gerente" && newRole !== "usuario") return { error: "Cargo inválido" };
 
   const guard = await assertUserBelongsToAccount(userId, accountId);
   if (guard.error) return guard;
 
   const supabase = await createClient();
+
+  if (guard.role === "admin" && newRole !== "admin" && (await wouldRemoveLastAdmin(supabase, accountId, userId))) {
+    return { error: "Esta conta ficaria sem nenhum Diretor / T.I — mude o cargo de outro Diretor primeiro, ou crie um novo." };
+  }
+
   const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
   if (error) return { error: `Falha ao mudar cargo: ${error.message}` };
   revalidatePath(`/superadmin/accounts/${accountId}/users`);
@@ -75,10 +80,18 @@ export interface ToggleBanState extends ActionState {}
 // Desativar/ativar via ban_duration nativo do GoTrue (decisão confirmada
 // com o usuário) — não duplica estado em profiles, o próprio Supabase Auth
 // impede login enquanto banido.
-export async function toggleUserBanAction(userId: string, accountId: string, ban: boolean): Promise<ToggleBanState> {
+// accountId primeiro — mesmo motivo de changeUserRoleAction (bind-ability).
+export async function toggleUserBanAction(accountId: string, userId: string, ban: boolean): Promise<ToggleBanState> {
   await requireRole("superadmin");
   const guard = await assertUserBelongsToAccount(userId, accountId);
   if (guard.error) return guard;
+
+  if (ban && guard.role === "admin") {
+    const supabase = await createClient();
+    if (await wouldRemoveLastAdmin(supabase, accountId, userId)) {
+      return { error: "Esta conta ficaria sem nenhum Diretor / T.I — desative outro Diretor primeiro, ou crie um novo." };
+    }
+  }
 
   const serviceClient = createServiceClient();
   const { error } = await serviceClient.auth.admin.updateUserById(userId, { ban_duration: ban ? BAN_FOREVER : "none" });
@@ -94,10 +107,18 @@ export interface DeleteUserState extends ActionState {}
 // (ver delete-user-button.tsx). profiles.id referencia auth.users com
 // on delete cascade, então apagar o usuário aqui já remove o profile junto,
 // sem precisar de um segundo delete.
-export async function deleteUserAction(userId: string, accountId: string): Promise<DeleteUserState> {
+// accountId primeiro — mesmo motivo de changeUserRoleAction (bind-ability).
+export async function deleteUserAction(accountId: string, userId: string): Promise<DeleteUserState> {
   await requireRole("superadmin");
   const guard = await assertUserBelongsToAccount(userId, accountId);
   if (guard.error) return guard;
+
+  if (guard.role === "admin") {
+    const supabase = await createClient();
+    if (await wouldRemoveLastAdmin(supabase, accountId, userId)) {
+      return { error: "Esta conta ficaria sem nenhum Diretor / T.I — exclua outro Diretor primeiro, ou crie um novo." };
+    }
+  }
 
   const serviceClient = createServiceClient();
   const { error } = await serviceClient.auth.admin.deleteUser(userId);
@@ -121,9 +142,10 @@ export interface ResetPasswordState extends ActionState {
 //   e-mail sozinho ("to be sent via a custom email provider") — o
 //   SuperAdmin precisa copiar e entregar manualmente por fora até
 //   email_enabled/Resend estarem ativos de verdade.
+// accountId primeiro — mesmo motivo de changeUserRoleAction (bind-ability).
 export async function resetUserPasswordAction(
-  userId: string,
   accountId: string,
+  userId: string,
   email: string,
   mode: "temporary" | "link"
 ): Promise<ResetPasswordState> {
@@ -145,11 +167,6 @@ export async function resetUserPasswordAction(
   return { success: true, recoveryLink: data.properties.action_link };
 }
 
-export interface CreateUserState extends ActionState {
-  createdEmail?: string;
-  tempPassword?: string;
-}
-
 // Mesma lógica de scripts/create-admin.mjs (auth.admin.createUser + trigger
 // on_auth_user_created cria o profile), agora como Server Action na
 // interface em vez de script manual. Senha gerada automaticamente (não
@@ -162,7 +179,7 @@ export async function createUserAction(_prevState: CreateUserState, formData: Fo
   const email = String(formData.get("email") ?? "").trim();
   const fullName = String(formData.get("fullName") ?? "").trim();
   const roleRaw = String(formData.get("role") ?? "");
-  const role: UserRole = roleRaw === "admin" ? "admin" : "usuario";
+  const role: UserRole = roleRaw === "admin" ? "admin" : roleRaw === "gerente" ? "gerente" : "usuario";
 
   if (!accountId) return { error: "Conta inválida" };
   if (!email || !email.includes("@")) return { error: "E-mail inválido" };
