@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  History,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Target,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
@@ -15,65 +26,10 @@ const ROLE_HOME: Record<UserRole, string> = {
   superadmin: "/superadmin",
 };
 
-function PulseIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <path d="M2 12h4l2.5-7L13 19l2.5-7H22" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3.5 2" />
-    </svg>
-  );
-}
-
-function TargetIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="3.5" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-    </svg>
-  );
-}
-
-function GearIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.24.75.24 1.15V10a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
-    </svg>
-  );
-}
-
-function ReportIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <path d="M9 3h6l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
-      <path d="M9 12h6M9 16h6M9 8h2" />
-    </svg>
-  );
-}
-
-function UsersIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
 interface NavItem {
   key: string;
   label: string;
-  icon: () => React.ReactElement;
+  icon: LucideIcon;
   href: string;
   roles: UserRole[];
 }
@@ -92,25 +48,25 @@ function buildNavItems(role: UserRole): NavItem[] {
   const items: NavItem[] = [
     {
       key: "painel",
-      label: role === "superadmin" ? "Clientes" : "Painel",
-      icon: PulseIcon,
+      label: role === "superadmin" ? "Clientes" : "Dashboard",
+      icon: role === "superadmin" ? Building2 : LayoutDashboard,
       href: ROLE_HOME[role],
       roles: ["admin", "gerente", "usuario", "superadmin"],
     },
-    { key: "historico", label: "Histórico", icon: ClockIcon, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
-    { key: "relatorios", label: "Relatórios", icon: ReportIcon, href: `${base}/relatorios`, roles: ["admin", "gerente", "usuario"] },
-    { key: "concorrentes", label: "Concorrentes", icon: TargetIcon, href: "/admin/competitors", roles: ["admin", "gerente"] },
+    { key: "historico", label: "Histórico", icon: History, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
+    { key: "relatorios", label: "Relatórios", icon: BarChart3, href: `${base}/relatorios`, roles: ["admin", "gerente", "usuario"] },
+    { key: "concorrentes", label: "Concorrentes", icon: Target, href: "/admin/competitors", roles: ["admin", "gerente"] },
     // Gerente também gerencia usuários (só que com teto: não cria/gerencia
     // outro gerente/admin — restrição aplicada nas Server Actions, ver
     // lib/users/actions.ts), por isso este item aparece pros dois cargos.
-    { key: "usuarios", label: "Usuários", icon: UsersIcon, href: "/admin/users", roles: ["admin", "gerente"] },
+    { key: "usuarios", label: "Usuários", icon: Users, href: "/admin/users", roles: ["admin", "gerente"] },
     // Corretor também acessa — só a preferência PESSOAL de e-mail
     // (/user/settings, mesmo componente reaproveitado de /admin/settings);
     // a gestão dos canais da conta continua exclusiva de admin/gerente,
     // isso é controlado dentro da própria página, não pelo requireRole daqui.
-    { key: "configuracoes", label: "Configurações", icon: GearIcon, href: `${base}/settings`, roles: ["admin", "gerente", "usuario"] },
+    { key: "configuracoes", label: "Configurações", icon: Settings, href: `${base}/settings`, roles: ["admin", "gerente", "usuario"] },
     // Plataforma inteira, não escopado a nenhuma conta — só SuperAdmin.
-    { key: "sistema", label: "Sistema", icon: GearIcon, href: "/superadmin/system", roles: ["superadmin"] },
+    { key: "sistema", label: "Sistema", icon: Settings, href: "/superadmin/system", roles: ["superadmin"] },
   ];
   return items.filter((item) => item.roles.includes(role));
 }
@@ -151,14 +107,29 @@ export function Sidebar({
           decide a margem reservada, olhando o mesmo cookie no servidor. */}
       <nav
         aria-label="Navegação principal"
-        className={`print:hidden group fixed inset-y-0 left-0 z-30 hidden flex-col gap-1 overflow-hidden border-r border-surface-border bg-surface py-4 transition-[width] duration-200 ease-out md:flex ${
+        className={`print:hidden group fixed inset-y-0 left-0 z-30 hidden flex-col gap-1 overflow-hidden border-r border-surface-border bg-nav py-4 transition-[width] duration-200 ease-out md:flex ${
           pinned ? "w-56" : "w-16 hover:w-56 focus-within:w-56"
         }`}
       >
-        <div className="mb-3 flex items-center justify-between gap-2 px-3 text-signal-text">
-          <div className="flex items-center gap-3">
-            <PulseIcon />
-            <span className={`whitespace-nowrap text-sm font-semibold ${labelOpacityClass}`}>Q&amp;A Imob</span>
+        {/* Marca: "Q&A" fica sempre visível (é o que aparece com a sidebar
+            recolhida, só ícones) — "Imob" e a tagline usam o mesmo
+            labelOpacityClass dos itens de navegação abaixo, revelados junto
+            no hover/foco/pin. font-display (BR Sonoma) + text-foreground —
+            item de destaque da área, não mais texto pequeno ao lado de um
+            ícone (o antigo Activity saiu). */}
+        <div className="mb-4 flex items-start justify-between gap-2 px-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="whitespace-nowrap font-display text-lg leading-tight font-bold text-signal-text">
+              Q&amp;A<span className={labelOpacityClass}>&nbsp;Imob</span>
+            </p>
+            {/* Sem whitespace-nowrap aqui de propósito (diferente do nome
+                acima) — a frase é mais longa que os 200px úteis da sidebar
+                expandida (224px - padding); precisa poder quebrar em 2
+                linhas em vez de estourar e ficar cortada pelo overflow-hidden
+                do nav. */}
+            <p className={`text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
+              Acompanhe seus concorrentes em tempo real!
+            </p>
           </div>
           <button
             type="button"
@@ -175,14 +146,17 @@ export function Sidebar({
             const active = pathname === item.href;
             return (
               <li key={item.key}>
+                {/* group/navlink separado do group da nav inteira (que revela o
+                    texto no hover) — escala só o ícone deste link, no hover
+                    dele especificamente, sem afetar os outros itens. */}
                 <Link
                   href={item.href}
                   onClick={blurOnMouseClick}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+                  className={`group/navlink flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
                     active ? "bg-signal/10 text-signal-text" : "text-muted hover:bg-background hover:text-foreground"
                   }`}
                 >
-                  <item.icon />
+                  <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
                   <span className={labelOpacityClass}>{item.label}</span>
                 </Link>
               </li>
@@ -195,7 +169,7 @@ export function Sidebar({
           pra 2-5 itens, e não depende de hover (dispositivo de toque). */}
       <nav
         aria-label="Navegação principal"
-        className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-surface py-1 md:hidden"
+        className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-nav py-1 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {items.map((item) => {
@@ -206,11 +180,11 @@ export function Sidebar({
               href={item.href}
               aria-label={item.label}
               onClick={blurOnMouseClick}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+              className={`group/navlink flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
                 active ? "text-signal-text" : "text-muted"
               }`}
             >
-              <item.icon />
+              <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
               {item.label}
             </Link>
           );
