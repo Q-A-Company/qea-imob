@@ -29,6 +29,26 @@ Confirmado esse padrão em `cewimoveis.com.br` (JetEngine, `orderby: modified`) 
 
 **Decisão (2026-07-09)**: não vamos construir suporte a POST+nonce agora — é escopo maior (extrair nonce do HTML/estado inicial, montar o corpo POST no formato específico de cada plugin, lidar com expiração do nonce em checagens periódicas) e foge do "resolver quando aparecer em escala" combinado para a Etapa 3. Para sites nesse padrão, hoje a cobertura fica limitada ao que `html_css` consegue ver na primeira renderização estática (útil quando a ordenação padrão é por recência, como confirmado em `cewimoveis`) — `cewimoveis` fica definitivamente como cobertura parcial (30/810, ~3,7%) até um dia justificar o investimento em Playwright.
 
+## Limitação conhecida: integração quebrada do lado do concorrente (`deboraimoveis.com.br`)
+
+`deboraimoveis.com.br` está com `site_configs` versão 1 (`html_css`, `confidence_score: 0.05`) em `status: "degradado"` — o container `#container-resultado-busca` fica vazio no HTML estático, os cards são carregados via AJAX depois do carregamento da página (ou por scroll). O concorrente tem **zero** `properties`/`property_changes` registrados (nenhum histórico real acumulado, cadastro nunca chegou a capturar nada).
+
+**Endpoint real descoberto via DevTools (manualmente, em sessão anterior)**: `POST https://www.deboraimoveis.com.br/retornar-imoveis-disponiveis`, form-urlencoded, parâmetros documentados no próprio JS deles (`assets/js/objImovel.js`, objeto `imovel` com comentários linha a linha, inclusive marcação explícita de quais campos são "OBRIGATÓRIO"). Ordenação padrão é `valordesc` (por preço, decrescente) — **não** por recência, então não existe atalho de "páginas quentes"; qualquer checagem teria que varrer o catálogo inteiro, igual ao caso `Sentineli`.
+
+**Sessão via `PHPSESSID` — testado e funciona**: um GET simples em `/venda` retorna `PHPSESSID` reaproveitável via header `Set-Cookie`, sem precisar de sessão de browser real "aquecida". Confirmado empiricamente (2026-07-11) reutilizando esse cookie com sucesso em 4 endpoints irmãos do mesmo backend: `retornar-tipos-disponiveis`, `retornar-cidades-disponiveis`, `retornar-bairros-disponiveis`, `retornar-parametros-gerais` — todos retornaram dados reais e corretos (cidades reais do Paraná, tipos de imóvel, bairros) usando só `fetch` puro, nenhum Playwright/browser necessário.
+
+**O endpoint de listagem em si está quebrado do lado deles**: `retornar-imoveis-disponiveis` retorna consistentemente
+
+```json
+{"error":true,"log":"Curl failed with error #22: The requested URL returned error: 500 Internal Server Error","message":"Ocorreu um erro inesperado. Redirecionando...","redirect":"/manutencao"}
+```
+
+Esse erro é o próprio fallback padrão da aplicação deles (`$.ajaxSetup({ complete: ... })` em `assets/js/utils.js`, comentado no código-fonte como "CONFIGURAÇÃO PADRÃO AJAX PARA CASO A API NÃO CONSIGA CONECTAR") — ou seja, é a aplicação deles sinalizando que a chamada interna dela (via cURL) ao backend de busca (aparentemente Imoview, a julgar pelos comentários no JS e pelo domínio `s3.imoview.com.br` nas imagens de demonstração) falhou ao conectar.
+
+**Descartado como problema de payload, não só teorizado**: testadas múltiplas variações antes de concluir — payload completo replicando exatamente os defaults documentados em `objImovel.js` (todos os ~40 campos), payload mínimo (só os 4 campos marcados "OBRIGATÓRIO"), `finalidade` como string (`'venda'`, valor default real do JS deles) e como numérico (`2`/`1`, valor sugerido pelo comentário deles, que diverge do próprio default), com e sem headers de AJAX (`X-Requested-With`, `Referer`, `Origin`), e até **corpo completamente vazio** — todas retornam o exato mesmo erro. Como os 4 endpoints irmãos no mesmo backend/sessão funcionam normalmente, a variável de payload está descartada: a falha é isolada ao endpoint de listagem especificamente, do lado deles.
+
+**Decisão (2026-07-11)**: não ativar nada — mantido em `degradado`/pendente de revisão, sem recalibração. Não é uma limitação técnica nossa (diferente do caso CEW acima, que é uma limitação de escopo do produto); é um bug real na integração deles, fora do nosso controle. Se um dia quisermos retomar, a descoberta já está pronta (endpoint, payload, mecanismo de sessão via `PHPSESSID` puro) — só seria preciso reconfirmar se a integração deles com a Imoview voltou a funcionar antes de construir o `site_config` `json_api` de verdade.
+
 ## Limitação conhecida: preço só na página de detalhe do imóvel
 
 Em `cutrimimobiliaria.com.br`, 25 de 200 imóveis (12,5%) não têm nenhuma menção de preço no card da listagem — nem valor numérico, nem marcador de "Sob Consulta". O preço provavelmente só existe na página individual do imóvel. Hoje esses casos caem em `price: null, price_status: "sob_consulta"`, **indistinguíveis** dos casos genuínos de "Sob Consulta" (que nesse mesmo site são só 3 de 200). Não existe fallback para visitar a página de detalhe — o produto só busca a página de listagem, por design (ver spec original). Se isso se repetir em escala em contas reais, vale considerar marcar esses casos com um terceiro estado (`price_status: "desconhecido"` ou similar) em vez de reaproveitar `sob_consulta`, para não subestimar silenciosamente a cobertura real de monitoramento de preço.
