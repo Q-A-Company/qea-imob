@@ -13,12 +13,14 @@ export interface LoginState {
 export async function login(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const email = formData.get("email");
   const password = formData.get("password");
+  // Checkbox nativo: "on" quando marcado, ausente do FormData quando não.
+  const rememberMe = formData.get("rememberMe") === "on";
 
   if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
     return { error: "Informe e-mail e senha." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createClient({ rememberMe });
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 import { login, type LoginState } from "@/lib/auth/actions";
 
 const initialState: LoginState = {};
@@ -40,9 +41,14 @@ export function LoginForm() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="password" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          Senha
-        </label>
+        <div className="flex items-center justify-between">
+          <label htmlFor="password" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            Senha
+          </label>
+          <Link href="/forgot-password" className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
+            Esqueci minha senha
+          </Link>
+        </div>
         <input
           id="password"
           name="password"
@@ -52,6 +58,15 @@ export function LoginForm() {
           className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-800"
         />
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+        <input
+          type="checkbox"
+          name="rememberMe"
+          className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
+        />
+        Lembrar de mim!
+      </label>
 
       {state?.error && (
         <p className="text-sm text-erro-texto" role="alert">

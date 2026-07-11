@@ -168,12 +168,32 @@ export async function removeOwnAvatarAction(): Promise<ActionState> {
 // exclusivo da tela de gestão). Não pede senha atual — o Supabase Auth não
 // expõe essa verificação nesta chamada; a sessão ativa já é a prova de
 // posse da conta.
-export async function updateOwnPasswordAction(newPassword: string, confirmPassword: string): Promise<ActionState> {
+export async function updateOwnPasswordAction(
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<ActionState> {
   const viewer = await requireRole(ANY_ROLE);
   if (newPassword.length < 8) return { error: "A senha precisa ter pelo menos 8 caracteres." };
   if (newPassword !== confirmPassword) return { error: "As senhas não coincidem." };
 
   const supabase = await createClient();
+
+  // Confirma a senha atual reautenticando antes de trocar — o Supabase
+  // Auth deixaria trocar só com a sessão já autenticada, sem pedir a senha
+  // atual de novo (updateUser não checa isso sozinho). profiles não guarda
+  // e-mail (só existe em auth.users); getUser() lê o e-mail da PRÓPRIA
+  // sessão, sem precisar de Admin API. signInWithPassword troca os cookies
+  // de sessão como efeito colateral (mesmo usuário, sessão renovada —
+  // inofensivo).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "Não foi possível confirmar seu e-mail." };
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+  if (reauthError) return { error: "Senha atual incorreta." };
+
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) return { error: `Falha ao alterar senha: ${error.message}` };
 

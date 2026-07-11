@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login"]);
+const PUBLIC_PATHS = new Set(["/login", "/forgot-password", "/reset-password"]);
 
 // Checagem otimista: só confirma se existe usuário autenticado (via
 // getUser(), que revalida o JWT) e redireciona para /login quando não há.

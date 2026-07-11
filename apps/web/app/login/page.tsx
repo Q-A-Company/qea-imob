@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Lock } from "lucide-react";
 import { getProfile, roleHome } from "@/lib/auth/dal";
 import { LoginForm } from "./login-form";
 
@@ -16,11 +17,18 @@ export default async function LoginPage() {
           Entre com sua conta para continuar.
         </p>
         <LoginForm />
+        {/* Indicação honesta, não uma promessa vaga: o site roda em HTTPS de
+            verdade (afirmação verificável), não um selo decorativo genérico
+            tipo "ambiente 100% seguro" sem lastro. */}
+        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-neutral-400 dark:text-neutral-500">
+          <Lock className="h-3.5 w-3.5" aria-hidden />
+          Conexão segura (HTTPS)
+        </p>
         {/* Transparência pra quem usa o sistema (funcionários da empresa
             cliente) — pedido explícito: acesso é monitorado por motivo de
             segurança interna, e isso precisa ser visível na tela de login,
             não só documentado em algum lugar que ninguém lê. */}
-        <p className="mt-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
+        <p className="mt-2 text-center text-xs text-neutral-400 dark:text-neutral-500">
           Por segurança, os acessos a este sistema são registrados (IP, dispositivo e horário).
         </p>
       </div>

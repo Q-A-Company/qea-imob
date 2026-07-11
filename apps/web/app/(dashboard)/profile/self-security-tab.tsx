@@ -7,11 +7,17 @@ import { useState, useTransition } from "react";
 // componente (não é UserSecurityTab com partes escondidas por permissão —
 // é outro componente, sem nenhum código capaz de mudar cargo/bloquear/
 // excluir), então não há como contorná-las manipulando este formulário.
+//
+// currentPassword obrigatório (pedido explícito) — diferente do
+// redefinir-senha que Admin/Gerente/SuperAdmin fazem sobre OUTRO usuário
+// (user-security-tab.tsx, ação administrativa, nunca pede a senha atual
+// de quem está sendo redefinido).
 export function SelfSecurityTab({
   onUpdatePassword,
 }: {
-  onUpdatePassword: (newPassword: string, confirmPassword: string) => Promise<{ error?: string; success?: boolean }>;
+  onUpdatePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<{ error?: string; success?: boolean }>;
 }) {
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -23,11 +29,12 @@ export function SelfSecurityTab({
     setError(null);
     setSuccess(false);
     startTransition(async () => {
-      const result = await onUpdatePassword(newPassword, confirmPassword);
+      const result = await onUpdatePassword(currentPassword, newPassword, confirmPassword);
       if (result.error) {
         setError(result.error);
       } else {
         setSuccess(true);
+        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       }
@@ -39,6 +46,20 @@ export function SelfSecurityTab({
       <h2 className="text-sm font-semibold text-foreground">Alterar senha</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:max-w-sm">
         <div className="flex flex-col gap-1">
+          <label htmlFor="currentPassword" className="text-xs font-medium text-muted">
+            Senha atual
+          </label>
+          <input
+            id="currentPassword"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+            className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
           <label htmlFor="newPassword" className="text-xs font-medium text-muted">
             Nova senha
           </label>
@@ -47,6 +68,7 @@ export function SelfSecurityTab({
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
             minLength={8}
             required
             className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
@@ -61,6 +83,7 @@ export function SelfSecurityTab({
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
             minLength={8}
             required
             className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
