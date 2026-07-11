@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 // user_deleted, user_password_reset, user_password_changed,
 // user_avatar_updated, user_avatar_removed, user_updated, settings_updated,
 // report_generated, competitor_created, competitor_status_changed,
-// competitor_interval_changed, competitor_check_triggered,
-// account_status_changed, account_notes_updated.
+// competitor_interval_changed, competitor_check_triggered, competitor_deleted,
+// account_status_changed, account_notes_updated, account_name_changed.
 export async function logAuditEvent(params: {
   actorUserId: string;
   accountId: string | null;

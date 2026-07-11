@@ -23,7 +23,9 @@ Foque apenas nesses campos. Não extraia bairro, área, quartos ou outros dados 
 
 Preste atenção especial a sinais de que a paginação é controlada por JavaScript/AJAX e não por navegação de URL simples: um botão (não um link <a href>) para "próxima página", um container com atributo como data-ajax-result, ou uma lista de páginas vazia no HTML estático. Quando notar esses sinais, defina pagination.type como 'next_link' (ou 'none' se nem isso houver) e adicione um warning explícito dizendo que a paginação pode não funcionar sem executar JavaScript.
 
-Sempre procure no texto da página (títulos, contadores de resultado, etc.) alguma menção de quantos imóveis existem no total e preencha total_listings_hint — isso é usado depois para detectar automaticamente quando a página mostra só uma fração do catálogo e vale a pena investigar um endpoint JSON por trás da paginação.`;
+Sempre procure no texto da página (títulos, contadores de resultado, etc.) alguma menção de quantos imóveis existem no total e preencha total_listings_hint — isso é usado depois para detectar automaticamente quando a página mostra só uma fração do catálogo e vale a pena investigar um endpoint JSON por trás da paginação.
+
+Se não houver essa menção explícita mas a paginação numerada mostrar o número da ÚLTIMA página (ex: um link ou texto indicando "página 135" ou similar), NÃO deixe total_listings_hint como null só por faltar o texto explícito — estime multiplicando o número da última página pela quantidade de cards visíveis nesta página, e diga em warnings que é uma estimativa derivada da paginação (não uma contagem exata do site). Isso importa: sem um total_listings_hint preenchido (nem que seja estimado), o sistema não consegue detectar que a prévia está vendo só uma fração pequena do catálogo, mesmo quando a evidência de que há muito mais páginas está bem ali na paginação.`;
 
 export interface GenerateSiteConfigResult {
   selectors: HtmlCssSiteConfig;

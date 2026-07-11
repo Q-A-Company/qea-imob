@@ -111,20 +111,42 @@ export function formatAuditEvent({ actionType, details }: AuditEventInput): stri
       return name ? `Concorrente "${name}" cadastrado` : "Concorrente cadastrado";
     }
     case "competitor_status_changed": {
-      const status = d.newStatus === "pausado" ? "Pausado" : d.newStatus === "ativo" ? "Ativo" : String(d.newStatus ?? "?");
-      return `Status do concorrente alterado para ${status}`;
+      const status =
+        d.newStatus === "pausado"
+          ? "Pausado"
+          : d.newStatus === "ativo"
+            ? "Ativo"
+            : d.newStatus === "arquivado"
+              ? "Arquivado"
+              : String(d.newStatus ?? "?");
+      const name = typeof d.name === "string" ? d.name : null;
+      return name ? `Status do concorrente "${name}" alterado para ${status}` : `Status do concorrente alterado para ${status}`;
     }
     case "competitor_interval_changed": {
       const minutes = typeof d.minutes === "number" ? d.minutes : null;
-      return minutes ? `Intervalo de checagem alterado para ${minutes} min` : "Intervalo de checagem alterado";
+      const name = typeof d.name === "string" ? d.name : null;
+      if (!minutes) return "Intervalo de checagem alterado";
+      return name
+        ? `Intervalo de checagem do concorrente "${name}" alterado para ${minutes} min`
+        : `Intervalo de checagem alterado para ${minutes} min`;
     }
-    case "competitor_check_triggered":
-      return "Checagem manual disparada";
+    case "competitor_check_triggered": {
+      const name = typeof d.name === "string" ? d.name : null;
+      return name ? `Checagem manual disparada para "${name}"` : "Checagem manual disparada";
+    }
+    case "competitor_deleted": {
+      const name = typeof d.name === "string" ? d.name : null;
+      return name ? `Concorrente "${name}" excluído permanentemente` : "Concorrente excluído permanentemente";
+    }
 
     case "account_status_changed":
       return `Conta ${d.active === true ? "ativada" : "desativada"}`;
     case "account_notes_updated":
       return "Notas da conta atualizadas";
+    case "account_name_changed": {
+      const newName = typeof d.newName === "string" ? d.newName : null;
+      return newName ? `Nome da conta alterado para "${newName}"` : "Nome da conta alterado";
+    }
 
     default:
       return actionType;

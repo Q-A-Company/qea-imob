@@ -12,7 +12,7 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   gerente: "Gerente",
   usuario: "Corretor",
 };
-export type CompetitorStatus = "ativo" | "pausado" | "erro";
+export type CompetitorStatus = "ativo" | "pausado" | "erro" | "arquivado";
 export type SiteConfigStatus = "ativo" | "degradado" | "aprendendo" | "pendente_revisao";
 export type PriceStatus = "valor" | "sob_consulta";
 export type PropertyStatus = "ativo" | "possivelmente_vendido";
@@ -28,6 +28,17 @@ type NoRelationships = { Relationships: [] };
 export interface Database {
   public: {
     Tables: {
+      password_recovery_requests: {
+        Row: {
+          email: string;
+          requested_at: string;
+        };
+        Insert: {
+          email: string;
+          requested_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["password_recovery_requests"]["Insert"]>;
+      } & NoRelationships;
       accounts: {
         Row: {
           id: string;
@@ -77,6 +88,11 @@ export interface Database {
           name: string;
           abbreviation: string;
           listing_url: string;
+          // Coluna gerada (generated always as ... stored, ver migration
+          // 0019) — só leitura, nunca aparece em Insert/Update. Usada pra
+          // filtrar duplicata independente de http/https, barra final ou
+          // maiúsculas (ver lib/competitors/normalize-url.ts).
+          listing_url_normalized: string;
           polling_interval_minutes: number;
           status: CompetitorStatus;
           last_checked_at: string | null;

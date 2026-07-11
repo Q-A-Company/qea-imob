@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
 import { ALLOWED_POLLING_INTERVALS } from "./constants";
+import { normalizeListingUrl } from "./normalize-url";
 import { logAuditEvent } from "@/lib/audit/log";
 
 export interface CheckCompetitorNowState {
@@ -47,7 +48,7 @@ export async function checkCompetitorNowAction(
   // dele antes de rodar a checagem privilegiada.
   const { data: competitor } = await supabase
     .from("competitors")
-    .select("id, account_id")
+    .select("id, account_id, name")
     .eq("id", competitorId)
     .single();
 
@@ -61,6 +62,7 @@ export async function checkCompetitorNowAction(
     actionType: "competitor_check_triggered",
     targetType: "competitor",
     targetId: competitorId,
+    details: { name: competitor.name },
   });
 
   try {
@@ -95,6 +97,15 @@ export interface RegisterCompetitorState {
     confidenceScore: number;
     warnings: string[];
     externalIdSanityOk: boolean;
+    // true quando a paginação FOI detectada (html_css com pagination.type
+    // != 'none') mas mesmo assim não deu pra estimar totalListingsHint —
+    // rede de segurança visual pro caso em que nem o número da última
+    // página está disponível (ver README, caso "Realler"): sem isso, o
+    // Admin via só "8 imóveis capturados (total do site desconhecido)",
+    // sem nenhum sinal de que a prévia é uma AMOSTRA da página 1, não o
+    // catálogo inteiro. json_api nunca marca isso — sua prévia já é
+    // exaustiva (extractFromJsonApi pagina de verdade durante o aprendizado).
+    paginationDetectedWithoutTotal: boolean;
   };
   // Preenchido só quando o competitor FOI criado mas o aprendizado via IA
   // falhou (site fora do ar, timeout, etc.) — distinto de `error`, que
@@ -138,6 +149,28 @@ export async function registerCompetitorAction(
   }
 
   const supabase = await createClient();
+
+  // Pré-checagem amigável — independe do status (ativo/pausado/erro/
+  // arquivado), mesma normalização de listing_url_normalized no banco (ver
+  // normalize-url.ts). A proteção definitiva é a constraint UNIQUE; isso
+  // aqui só evita o usuário ver um erro cru de "duplicate key" quando dá
+  // pra avisar antes e, se for o caso, sugerir reativar em vez de recadastrar.
+  const normalizedUrl = normalizeListingUrl(listingUrl);
+  const { data: existing } = await supabase
+    .from("competitors")
+    .select("name, status")
+    .eq("account_id", profile.account_id)
+    .eq("listing_url_normalized", normalizedUrl)
+    .maybeSingle();
+  if (existing) {
+    if (existing.status === "arquivado") {
+      return {
+        error: `"${existing.name}" já foi cadastrado antes com esta URL e está arquivado — reative-o na aba Arquivados em vez de cadastrar de novo (evita aprender o site outra vez).`,
+      };
+    }
+    return { error: `"${existing.name}" já está cadastrado nesta conta com esta URL.` };
+  }
+
   const { data: competitor, error: insertError } = await supabase
     .from("competitors")
     .insert({
@@ -150,7 +183,17 @@ export async function registerCompetitorAction(
     })
     .select("id")
     .single();
-  if (insertError || !competitor) return { error: `Falha ao cadastrar: ${insertError?.message}` };
+  if (insertError) {
+    // Rede de segurança contra corrida (dois cadastros simultâneos passando
+    // pela pré-checagem acima antes de qualquer um commitar) — 23505 é o
+    // código do Postgres pra unique_violation, aqui só pode ser a
+    // constraint competitors_account_listing_url_unique.
+    if (insertError.code === "23505") {
+      return { error: "Esse concorrente já está cadastrado nesta conta com esta URL (detectado no momento do cadastro)." };
+    }
+    return { error: `Falha ao cadastrar: ${insertError.message}` };
+  }
+  if (!competitor) return { error: "Falha ao cadastrar: nenhum registro retornado" };
 
   await logAuditEvent({
     actorUserId: profile.id,
@@ -179,6 +222,8 @@ export async function registerCompetitorAction(
       return { learningError: `Concorrente cadastrado, mas falha ao salvar a configuração aprendida: ${siteConfigError?.message}` };
     }
 
+    const hasPagination = learned.selectors.strategy === "html_css" && learned.selectors.pagination.type !== "none";
+
     return {
       learning: {
         competitorId: competitor.id,
@@ -189,6 +234,7 @@ export async function registerCompetitorAction(
         confidenceScore: learned.selectors.confidence_score,
         warnings: learned.selectors.warnings,
         externalIdSanityOk: learned.externalIdSanityOk,
+        paginationDetectedWithoutTotal: hasPagination && learned.stats.totalListingsHint === null,
       },
     };
   } catch (err) {
@@ -269,21 +315,27 @@ export interface UpdateCompetitorState {
   success?: boolean;
 }
 
-// Pausar/retomar checagem automática. getDueCompetitors() (Etapa 5,
-// packages/scraper/jobs/scheduler.ts) já filtra .eq("status", "ativo") —
-// confirmado lendo o código antes de construir este botão, não assumido —
-// então um concorrente 'pausado' aqui realmente para de ser verificado
-// pelo scheduler, não é só cosmético na tela. "Verificar agora" continua
+// Pausar/retomar/arquivar/reativar — todas as transições de status que o
+// usuário controla diretamente (getDueCompetitors(), packages/scraper/jobs/
+// scheduler.ts, já filtra .eq("status", "ativo") — confirmado lendo o
+// código antes de construir este botão, não assumido — então tanto
+// 'pausado' quanto 'arquivado' aqui realmente param de ser verificados
+// pelo scheduler, não é só cosmético na tela). 'erro' fica de fora de
+// propósito: só o circuit breaker do scraper define isso, nunca uma ação
+// direta do usuário. Arquivar/reativar reaproveita esta mesma action (não
+// uma nova) — é a mesma mecânica de trocar status + checar posse, só um
+// valor a mais; volta pra 'ativo' direto, sem re-rodar aprendizado via IA,
+// já que o site_config antigo continua válido. "Verificar agora" continua
 // funcionando em concorrente pausado de propósito (fluxo de recuperação já
 // existente desde a Etapa 5: se der certo, reativa sozinho).
 export async function updateCompetitorStatusAction(
   competitorId: string,
-  newStatus: "ativo" | "pausado"
+  newStatus: "ativo" | "pausado" | "arquivado"
 ): Promise<UpdateCompetitorState> {
   const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
-  const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id, name").eq("id", competitorId).single();
   if (!competitor || competitor.account_id !== profile.account_id) {
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
   }
@@ -297,7 +349,85 @@ export async function updateCompetitorStatusAction(
     actionType: "competitor_status_changed",
     targetType: "competitor",
     targetId: competitorId,
-    details: { newStatus },
+    details: { newStatus, name: competitor.name },
+  });
+  revalidatePath("/admin/competitors");
+  return { success: true };
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+const ID_CHUNK_SIZE = 500;
+
+export interface DeleteCompetitorState {
+  error?: string;
+  success?: boolean;
+}
+
+// Exclusão definitiva — segundo nível, mais escondido (só acessível a
+// partir da aba Arquivados na UI, atrás de um modal de confirmação forte),
+// diferente de arquivar (updateCompetitorStatusAction com
+// newStatus='arquivado': reversível, não apaga nada). Cascade do banco já
+// cobre site_configs/properties/property_changes/scraper_runs (FK
+// `on delete cascade` em cada uma, ver supabase/migrations/0001_init.sql) —
+// só notifications precisa de exclusão EXPLÍCITA aqui, porque
+// notifications.property_change_id é `on delete set null`, não cascade
+// (pensado pra sobreviver a limpezas de property_changes antigas mantendo
+// o texto da notificação já denormalizado) — sem isso, excluir o
+// concorrente deixaria notificações "órfãs" (title/message intactos, só
+// sem o vínculo) em vez de realmente apagadas, que é o que foi pedido.
+//
+// Busca paginada (.range() explícito) em vez de um .select() solto — mesma
+// lição já documentada em packages/scraper/jobs/send-daily-digest.ts: sem
+// isso, o Postgres/PostgREST corta silenciosamente em 1000 linhas. IDs em
+// lotes de 500 pro .in() — evita o outro bug já visto nesta sessão (lista
+// de IDs grande demais quebrando a query).
+export async function deleteCompetitorPermanentlyAction(competitorId: string): Promise<DeleteCompetitorState> {
+  const profile = await requireRole(["admin", "gerente"]);
+  const supabase = await createClient();
+
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id, name").eq("id", competitorId).single();
+  if (!competitor || competitor.account_id !== profile.account_id) {
+    return { error: "Concorrente não encontrado ou não pertence à sua conta" };
+  }
+
+  const propertyIds: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase.from("properties").select("id").eq("competitor_id", competitorId).range(offset, offset + 999);
+    if (error) return { error: `Falha ao buscar imóveis do concorrente: ${error.message}` };
+    propertyIds.push(...(data ?? []).map((p) => p.id));
+    if (!data || data.length < 1000) break;
+  }
+
+  const changeIds: string[] = [];
+  for (const idsChunk of chunk(propertyIds, ID_CHUNK_SIZE)) {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await supabase.from("property_changes").select("id").in("property_id", idsChunk).range(offset, offset + 999);
+      if (error) return { error: `Falha ao buscar histórico de mudanças: ${error.message}` };
+      changeIds.push(...(data ?? []).map((c) => c.id));
+      if (!data || data.length < 1000) break;
+    }
+  }
+
+  for (const idsChunk of chunk(changeIds, ID_CHUNK_SIZE)) {
+    const { error } = await supabase.from("notifications").delete().in("property_change_id", idsChunk);
+    if (error) return { error: `Falha ao apagar notificações relacionadas: ${error.message}` };
+  }
+
+  const { error: deleteError } = await supabase.from("competitors").delete().eq("id", competitorId);
+  if (deleteError) return { error: `Falha ao excluir concorrente: ${deleteError.message}` };
+
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "competitor_deleted",
+    targetType: "competitor",
+    targetId: competitorId,
+    details: { name: competitor.name },
   });
   revalidatePath("/admin/competitors");
   return { success: true };
@@ -313,7 +443,7 @@ export async function updateCompetitorIntervalAction(competitorId: string, minut
   }
 
   const supabase = await createClient();
-  const { data: competitor } = await supabase.from("competitors").select("id, account_id").eq("id", competitorId).single();
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id, name").eq("id", competitorId).single();
   if (!competitor || competitor.account_id !== profile.account_id) {
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
   }
@@ -327,7 +457,7 @@ export async function updateCompetitorIntervalAction(competitorId: string, minut
     actionType: "competitor_interval_changed",
     targetType: "competitor",
     targetId: competitorId,
-    details: { minutes },
+    details: { minutes, name: competitor.name },
   });
   revalidatePath("/admin/competitors");
   return { success: true };

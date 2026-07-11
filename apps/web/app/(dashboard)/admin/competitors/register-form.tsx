@@ -89,6 +89,14 @@ export function RegisterCompetitorForm() {
           )}
         </div>
 
+        {state.learning.paginationDetectedWithoutTotal && (
+          <p className="rounded-md border border-erro/30 bg-erro/10 px-3 py-2 text-xs text-erro-texto" role="alert">
+            Não sabemos o total real de imóveis do site, mas ele tem paginação (mais páginas além da 1ª) — esta prévia
+            mostra só uma amostra da página 1, não o catálogo inteiro. A checagem completa só acontece depois de
+            confirmar e rodar &quot;Verificar agora&quot; ou aguardar o próximo ciclo automático.
+          </p>
+        )}
+
         {resolveError && (
           <p className="text-sm text-erro-texto" role="alert">
             {resolveError}

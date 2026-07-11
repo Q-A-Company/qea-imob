@@ -4,6 +4,9 @@ import { useState } from "react";
 import { CheckNowButton } from "./check-now-button";
 import { StatusToggle } from "./status-toggle";
 import { IntervalSelect } from "./interval-select";
+import { ArchiveButton } from "./archive-button";
+import { ReactivateButton } from "./reactivate-button";
+import { DeleteCompetitorButton } from "./delete-competitor-button";
 
 export interface CompetitorRow {
   id: string;
@@ -15,12 +18,15 @@ export interface CompetitorRow {
   pollingIntervalMinutes: number;
 }
 
-const STATUS_LABEL: Record<string, string> = { ativo: "Ativo", pausado: "Pausado", erro: "Erro" };
+const STATUS_LABEL: Record<string, string> = { ativo: "Ativo", pausado: "Pausado", erro: "Erro", arquivado: "Arquivado" };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   ativo: "border-sucesso/30 bg-sucesso/10 text-sucesso-texto",
   pausado: "border-erro/30 bg-erro/10 text-erro-texto",
   erro: "border-erro/30 bg-erro/10 text-erro-texto",
+  // Neutro de propósito — arquivado não é bom nem ruim (diferente de
+  // ativo/pausado/erro), é só um estado "fora de operação" reversível.
+  arquivado: "border-surface-border bg-background text-muted",
 };
 
 function formatDateTime(value: string | null) {
@@ -28,7 +34,7 @@ function formatDateTime(value: string | null) {
   return new Date(value).toLocaleString("pt-BR");
 }
 
-type FilterTab = "todos" | "ativo" | "pausado" | "erro";
+type FilterTab = "todos" | "ativo" | "pausado" | "erro" | "arquivado";
 
 // Filtro por status em memória (client) — a lista inteira já veio do
 // servidor de uma vez (é escopada a UMA conta, não cresce sem limite tipo
@@ -36,6 +42,11 @@ type FilterTab = "todos" | "ativo" | "pausado" | "erro";
 // Melhoria de usabilidade não pedida explicitamente: fica mais útil conforme
 // a conta cadastra mais concorrentes; só aparece com >4 cadastrados pra não
 // poluir o caso comum (poucos concorrentes).
+//
+// "Todos" NUNCA inclui arquivados — pedido explícito: arquivado precisa
+// sumir da listagem principal, só fica visível na aba "Arquivados"
+// dedicada (também condicional, só aparece com ≥1 arquivado, mesmo padrão
+// já usado pra "Erro").
 export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] }) {
   const [filter, setFilter] = useState<FilterTab>("todos");
 
@@ -43,11 +54,14 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
     return <p className="text-sm text-muted">Nenhum concorrente cadastrado para esta conta ainda.</p>;
   }
 
+  const nonArchived = competitors.filter((c) => c.status !== "arquivado");
+
   const counts = {
-    todos: competitors.length,
+    todos: nonArchived.length,
     ativo: competitors.filter((c) => c.status === "ativo").length,
     pausado: competitors.filter((c) => c.status === "pausado").length,
     erro: competitors.filter((c) => c.status === "erro").length,
+    arquivado: competitors.filter((c) => c.status === "arquivado").length,
   };
 
   const tabs: { key: FilterTab; label: string }[] = [
@@ -55,9 +69,10 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
     { key: "ativo", label: `Ativos (${counts.ativo})` },
     { key: "pausado", label: `Pausados (${counts.pausado})` },
     ...(counts.erro > 0 ? ([{ key: "erro", label: `Erro (${counts.erro})` }] as const) : []),
+    ...(counts.arquivado > 0 ? ([{ key: "arquivado", label: `Arquivados (${counts.arquivado})` }] as const) : []),
   ];
 
-  const filtered = filter === "todos" ? competitors : competitors.filter((c) => c.status === filter);
+  const filtered = filter === "todos" ? nonArchived : competitors.filter((c) => c.status === filter);
 
   return (
     <div className="flex flex-col gap-3">
@@ -82,32 +97,45 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
         <p className="text-sm text-muted">Nenhum concorrente nesse filtro.</p>
       ) : (
         <ul className="divide-y divide-surface-border rounded-lg border border-surface-border bg-surface">
-          {filtered.map((competitor) => (
-            <li key={competitor.id} className="flex items-center justify-between gap-4 px-4 py-3.5">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <span className="shrink-0 rounded bg-background px-1.5 py-0.5 font-mono text-[11px] font-semibold text-signal-text">
-                    {competitor.abbreviation}
-                  </span>
-                  <span className="truncate">{competitor.name}</span>
-                </p>
-                <p className="mt-1 truncate text-xs text-muted">{competitor.listingUrl}</p>
-                <p className="mt-1.5 flex items-center gap-2 text-xs text-muted">
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE_CLASS[competitor.status] ?? ""}`}
-                  >
-                    {STATUS_LABEL[competitor.status] ?? competitor.status}
-                  </span>
-                  Último check: {formatDateTime(competitor.lastCheckedAt)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-start gap-2">
-                <IntervalSelect competitorId={competitor.id} minutes={competitor.pollingIntervalMinutes} />
-                <StatusToggle competitorId={competitor.id} status={competitor.status} />
-                <CheckNowButton competitorId={competitor.id} />
-              </div>
-            </li>
-          ))}
+          {filtered.map((competitor) => {
+            const isArchived = competitor.status === "arquivado";
+            return (
+              <li key={competitor.id} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <span className="shrink-0 rounded bg-background px-1.5 py-0.5 font-mono text-[11px] font-semibold text-signal-text">
+                      {competitor.abbreviation}
+                    </span>
+                    <span className="truncate">{competitor.name}</span>
+                  </p>
+                  <p className="mt-1 truncate text-xs text-muted">{competitor.listingUrl}</p>
+                  <p className="mt-1.5 flex items-center gap-2 text-xs text-muted">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE_CLASS[competitor.status] ?? ""}`}
+                    >
+                      {STATUS_LABEL[competitor.status] ?? competitor.status}
+                    </span>
+                    Último check: {formatDateTime(competitor.lastCheckedAt)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-start gap-2">
+                  {isArchived ? (
+                    <>
+                      <ReactivateButton competitorId={competitor.id} />
+                      <DeleteCompetitorButton competitorId={competitor.id} competitorName={competitor.name} />
+                    </>
+                  ) : (
+                    <>
+                      <IntervalSelect competitorId={competitor.id} minutes={competitor.pollingIntervalMinutes} />
+                      <StatusToggle competitorId={competitor.id} status={competitor.status} />
+                      <CheckNowButton competitorId={competitor.id} />
+                      <ArchiveButton competitorId={competitor.id} />
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

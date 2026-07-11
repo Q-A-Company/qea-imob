@@ -57,7 +57,7 @@ export const HtmlCssSiteConfig = z.object({
     .int()
     .nullable()
     .describe(
-      "Se o texto da página mencionar quantos imóveis/resultados existem no total (ex: '1.409 imóveis', '335 imóveis', '200 resultados'), extraia esse número aqui. null se não encontrar essa informação em lugar nenhum da página."
+      "Se o texto da página mencionar quantos imóveis/resultados existem no total (ex: '1.409 imóveis', '335 imóveis', '200 resultados'), extraia esse número aqui. Se não houver essa menção explícita, mas a paginação mostrar o número da ÚLTIMA página (ex: 'página 135' ou um link para a última página de uma paginação numerada), ESTIME o total multiplicando esse número pela quantidade de cards visíveis nesta página (ex: última página = 135, 8 cards nesta página → estime ~1080) e registre em warnings que é uma estimativa derivada da paginação, não uma contagem explícita do site. null apenas se nenhuma das duas informações (menção explícita OU número de última página) estiver disponível."
     ),
   confidence_score: z
     .number()
