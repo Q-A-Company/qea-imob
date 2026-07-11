@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { fetchListingHtml } from "./fetch-html.js";
+import { fetchListingHtml, HttpStatusError } from "./fetch-html.js";
 import { extractFromHtml } from "./html-extractor.js";
 import type { HtmlCssSiteConfig } from "../ai/site-config-schema.js";
 import type { ExtractedProperty } from "./types.js";
@@ -39,17 +39,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchHtmlWithRetry(url: string): Promise<string | null> {
+interface PageFetchResult {
+  html: string | null;
+  // true quando a resposta foi um 404 específico — sinal de fim natural da
+  // paginação numerada (a página seguinte à última real simplesmente não
+  // existe, ex: WordPress), não uma falha de rede/servidor. Confirmado
+  // empiricamente contra mullerimoveisrj.com.br: página 135 (real) responde
+  // 200, página 136 (além do fim) responde 404 de forma consistente — não é
+  // instabilidade passageira, é o comportamento normal do site. Por isso um
+  // 404 nem entra no loop de retry (retry não muda um 404 estrutural) e é
+  // tratado como stoppedReason "no_more_pages", não "fetch_failed", no
+  // chamador — sem essa distinção, TODA checagem real desse tipo de site
+  // reportava falha de rede permanentemente, disparando o circuit breaker
+  // (pausa automática após 3 checagens) e desligando pra sempre a inferência
+  // de "possivelmente vendido" (que exige stopped_early_due_to_error=false).
+  notFound: boolean;
+}
+
+async function fetchHtmlWithRetry(url: string): Promise<PageFetchResult> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const { html } = await fetchListingHtml(url);
-      return html;
-    } catch {
-      // tenta de novo com backoff
+      return { html, notFound: false };
+    } catch (err) {
+      if (err instanceof HttpStatusError && err.status === 404) {
+        return { html: null, notFound: true };
+      }
+      // outro erro (5xx, timeout, rede) — pode ser transitório, tenta de
+      // novo com backoff.
     }
     if (attempt < MAX_RETRIES) await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
   }
-  return null;
+  return { html: null, notFound: false };
 }
 
 // Acha, dentro do HTML da página 1, os links reais para as páginas 2 e 3 da
@@ -138,7 +159,10 @@ export async function extractAllPagesFromHtml(params: {
   }
 
   for (let page = 2; page <= MAX_PAGES; page++) {
-    const html = await fetchHtmlWithRetry(buildPageUrl(page));
+    const { html, notFound } = await fetchHtmlWithRetry(buildPageUrl(page));
+    if (notFound) {
+      return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "no_more_pages" };
+    }
     if (html === null) {
       return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "fetch_failed" };
     }

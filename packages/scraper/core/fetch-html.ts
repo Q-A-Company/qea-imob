@@ -9,6 +9,24 @@ export class RobotsDisallowedError extends Error {
   }
 }
 
+// Carrega o status HTTP de verdade — necessário pra html-paginator.ts
+// distinguir um 404 estrutural de fim de paginação (numeração numerada que
+// não tem mais páginas além da última real, ex: WordPress) de uma falha de
+// rede/servidor de verdade (5xx, timeout). Sem isso, os dois casos eram
+// lançados como o mesmo `Error` genérico e tratados como falha real —
+// pausando o concorrente pelo circuit breaker mesmo quando a extração
+// completou com sucesso, e desligando permanentemente a detecção de
+// "possivelmente vendido" (que exige stopped_early_due_to_error=false).
+export class HttpStatusError extends Error {
+  constructor(
+    public readonly status: number,
+    url: string
+  ) {
+    super(`Falha ao buscar ${url}: HTTP ${status}`);
+    this.name = "HttpStatusError";
+  }
+}
+
 async function isAllowedByRobots(url: string): Promise<boolean> {
   const target = new URL(url);
   const robotsUrl = `${target.origin}/robots.txt`;
@@ -70,7 +88,7 @@ export async function fetchListingHtml(
   });
 
   if (!res.ok) {
-    throw new Error(`Falha ao buscar ${url}: HTTP ${res.status}`);
+    throw new HttpStatusError(res.status, url);
   }
 
   return { html: await res.text(), status: res.status };
