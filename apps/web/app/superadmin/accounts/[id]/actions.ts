@@ -49,6 +49,36 @@ export async function updateAccountStatusAction(accountId: string, active: boole
   return { success: true };
 }
 
+// Nome exibido em 3 lugares (ver AccountNameEditor): banner "Visualizando"
+// do layout.tsx, lista de Clientes do SuperAdmin, e cabeçalho de relatórios
+// impressos/exportados (Admin/Gerente/Corretor) — por isso revalida o
+// mesmo par de paths que updateAccountStatusAction (também aparece nos
+// dois primeiros); o cabeçalho de impressão não precisa de revalidação
+// própria porque busca a conta de novo a cada carga da página de relatórios.
+export async function updateAccountNameAction(accountId: string, name: string): Promise<ActionState> {
+  const viewer = await requireRole("superadmin");
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Nome não pode ficar em branco" };
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("accounts").select("name").eq("id", accountId).maybeSingle();
+
+  const { error } = await supabase.from("accounts").update({ name: trimmed }).eq("id", accountId);
+  if (error) return { error: `Falha ao atualizar nome da conta: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "account_name_changed",
+    targetType: "account",
+    targetId: accountId,
+    details: { oldName: current?.name ?? null, newName: trimmed },
+  });
+  revalidatePath(`/superadmin/accounts/${accountId}`, "layout");
+  revalidatePath("/superadmin");
+  return { success: true };
+}
+
 export async function updateAccountNotesAction(accountId: string, notes: string): Promise<ActionState> {
   const viewer = await requireRole("superadmin");
   const supabase = await createClient();

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, BarChart3, LayoutDashboard, Settings, Target, Users, type LucideIcon } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, LayoutDashboard, Settings, Target, Users, type LucideIcon } from "lucide-react";
 
 interface NavItem {
   key: string;
@@ -19,6 +19,9 @@ function buildAccountNavItems(accountId: string): NavItem[] {
     { key: "concorrentes", label: "Concorrentes", icon: Target, href: `${base}/competitors` },
     { key: "usuarios", label: "Usuários", icon: Users, href: `${base}/users` },
     { key: "configuracoes", label: "Configurações", icon: Settings, href: `${base}/settings` },
+    // Reaproveita audit_log (já escopado por account_id), excluindo
+    // login/logout — ver lib/audit/get-account-audit-log.ts.
+    { key: "atividade", label: "Atividade", icon: Activity, href: `${base}/activity` },
     { key: "erros", label: "Relatório de erros", icon: AlertTriangle, href: `${base}/errors` },
   ];
 }

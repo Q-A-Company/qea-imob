@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { getAccountSettingsData } from "../get-account-settings-data";
 import { AccountStatusToggle } from "../account-status-toggle";
+import { AccountNameEditor } from "../account-name-editor";
 import { AccountNotesEditor } from "../account-notes-editor";
 
 function formatDateTime(value: string): string {
@@ -42,6 +43,8 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
           </p>
         )}
       </div>
+
+      <AccountNameEditor accountId={data.id} initialName={data.name} />
 
       <AccountNotesEditor accountId={data.id} initialNotes={data.internalNotes} />
 
