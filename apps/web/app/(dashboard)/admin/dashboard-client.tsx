@@ -169,12 +169,17 @@ export function DashboardClient({
         <>
           {/* Duas colunas a partir de lg: feed (com os 2 indicadores acima
               dele) à esquerda, coluna de 3 gráficos compactos à direita.
-              items-stretch (padrão do grid) faz as duas colunas terminarem
-              alinhadas na mesma linha inferior — a coluna de gráficos usa
-              h-full + flex-1 em cada gráfico (min-h-0 pra poder encolher em
-              vez de esticar a linha do grid) pra nunca ultrapassar a altura
-              do lado esquerdo (indicadores + feed juntos). */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              Cada card tem um tamanho PADRÃO fixo (h-[480px] no feed, h-60
+              nos 3 gráficos) — pedido explícito pra desacoplar as duas
+              colunas: se o feed tiver muitas linhas, ele não estica os
+              cards de gráfico pra acompanhar (o feed só rola por dentro,
+              via overflow-y-auto que já existe em changes-feed.tsx); se o
+              feed tiver poucas linhas, os cards de gráfico não encolhem
+              pra caber nele — cada lado só ocupa o próprio tamanho padrão,
+              podendo terminar mais alto ou mais baixo que o outro.
+              items-start (não o items-stretch padrão do grid) garante que
+              nenhuma coluna force altura na outra. */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
             <motion.div variants={item} className="flex flex-col gap-4 lg:col-span-2">
               <div className="grid grid-cols-2 gap-3">
                 <KpiCard
@@ -192,21 +197,24 @@ export function DashboardClient({
                   tooltip="Concorrentes com monitoramento ativo agora (não pausados)."
                 />
               </div>
-              <div className="min-h-0 flex-1">
+              <div className="h-[480px]">
                 <ChangesFeed feed={data.feed} />
               </div>
             </motion.div>
 
+            {/* Mudanças por concorrente continua com altura fixa (h-56, um
+                pouco menor que antes) — sempre tem pizza + legenda, faz
+                sentido ter um tamanho estável. Horários/Voláteis, não: cada
+                um tem no máximo 5 linhas (RankingBars), então a altura deles
+                varia com a quantidade de dados de verdade — sem wrapper de
+                altura fixa, cada card só ocupa o que precisa (ver h-full
+                removido dos componentes em si). */}
             <motion.div variants={item} className="flex flex-col gap-4">
-              <div className="min-h-0 flex-1">
+              <div className="h-56">
                 <CompetitorPieChart breakdownByWindow={data.breakdownByWindow} />
               </div>
-              <div className="min-h-0 flex-1">
-                <HourlyVolumeChart hourlyVolumes={data.hourlyVolumes30d} />
-              </div>
-              <div className="min-h-0 flex-1">
-                <VolatilePropertiesCard properties={data.topVolatileProperties30d} />
-              </div>
+              <HourlyVolumeChart hourlyVolumes={data.hourlyVolumes30d} />
+              <VolatilePropertiesCard properties={data.topVolatileProperties30d} />
             </motion.div>
           </div>
         </>

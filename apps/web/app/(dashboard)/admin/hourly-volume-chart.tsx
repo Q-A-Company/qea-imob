@@ -24,7 +24,7 @@ export function HourlyVolumeChart({ hourlyVolumes }: { hourlyVolumes: HourlyVolu
     .slice(0, TOP_LIMIT);
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-surface-border bg-surface p-4">
+    <div className="flex flex-col rounded-lg border border-surface-border bg-surface p-4">
       <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted">
         Horários com mais alterações · 30 dias
         <InfoTooltip text="Os horários do dia (UTC) com mais mudanças de preço detectadas, somando os últimos 30 dias." />
