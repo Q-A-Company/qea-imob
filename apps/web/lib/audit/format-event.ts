@@ -94,6 +94,8 @@ export function formatAuditEvent({ actionType, details }: AuditEventInput): stri
 
     case "user_avatar_updated":
       return "Foto de perfil atualizada";
+    case "user_avatar_removed":
+      return "Foto de perfil removida";
 
     case "settings_updated": {
       const channel = d.channel === "email" ? "E-mail" : d.channel === "site" ? "Site" : null;

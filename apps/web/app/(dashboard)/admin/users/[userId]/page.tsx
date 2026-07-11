@@ -7,6 +7,7 @@ import { UserEditContent } from "@/app/superadmin/accounts/[id]/user-edit-conten
 import {
   changeUserRoleActionForAdmin,
   deleteUserActionForAdmin,
+  removeUserAvatarActionForAdmin,
   resetUserPasswordActionForAdmin,
   setUserPasswordActionForAdmin,
   toggleUserBanActionForAdmin,
@@ -41,6 +42,7 @@ export default async function AdminUserEditPage({ params }: { params: Promise<{ 
         setPassword: setUserPasswordActionForAdmin,
         updateProfile: updateUserProfileActionForAdmin,
         uploadAvatar: uploadUserAvatarActionForAdmin,
+        removeAvatar: removeUserAvatarActionForAdmin,
       }}
     />
   );

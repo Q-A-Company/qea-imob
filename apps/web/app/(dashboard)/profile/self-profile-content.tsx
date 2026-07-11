@@ -11,7 +11,7 @@ import { UserEmployeeDataTab } from "@/app/superadmin/accounts/[id]/user-employe
 import { UserAccessLogTab } from "@/app/superadmin/accounts/[id]/user-access-log-tab";
 import { UserHistoryTab } from "@/app/superadmin/accounts/[id]/user-history-tab";
 import { SelfSecurityTab } from "./self-security-tab";
-import { updateOwnProfileAction, uploadOwnAvatarAction, updateOwnPasswordAction } from "@/lib/profile/actions";
+import { updateOwnProfileAction, uploadOwnAvatarAction, removeOwnAvatarAction, updateOwnPasswordAction } from "@/lib/profile/actions";
 
 // Página de PERFIL PRÓPRIO (/profile) — qualquer cargo chega aqui clicando
 // no header (ver header.tsx). Reaproveita Resumo/Dados do Colaborador/
@@ -53,7 +53,14 @@ export function SelfProfileContent({
         {(activeTab) => {
           if (activeTab === "resumo") return <UserSummaryTab user={user} />;
           if (activeTab === "dados") {
-            return <UserEmployeeDataTab user={user} onUpdateProfile={updateOwnProfileAction} onUploadAvatar={uploadOwnAvatarAction} />;
+            return (
+              <UserEmployeeDataTab
+                user={user}
+                onUpdateProfile={updateOwnProfileAction}
+                onUploadAvatar={uploadOwnAvatarAction}
+                onRemoveAvatar={removeOwnAvatarAction}
+              />
+            );
           }
           if (activeTab === "acessos") return <UserAccessLogTab rows={loginAudit.rows} totalCount={loginAudit.totalCount} />;
           if (activeTab === "historico") return <UserHistoryTab rows={auditLog.rows} totalCount={auditLog.totalCount} />;

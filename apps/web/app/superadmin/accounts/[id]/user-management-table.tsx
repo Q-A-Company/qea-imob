@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import type { AccountUser } from "@/lib/users/get-account-users";
 import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
+import { Avatar } from "@/app/(dashboard)/avatar";
 
 interface ActionResult {
   error?: string;
@@ -83,7 +84,7 @@ export function DeleteUserButton({
           onClick={openDialog}
           aria-label="Excluir usuário"
           title="Excluir"
-          className="rounded-md p-1.5 text-muted hover:bg-red-500/10 hover:text-red-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+          className="rounded-md p-1.5 text-muted hover:bg-erro/10 hover:text-erro-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -91,7 +92,7 @@ export function DeleteUserButton({
         <button
           type="button"
           onClick={openDialog}
-          className="w-fit rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/15"
+          className="w-fit rounded-md border border-erro/40 bg-erro/10 px-3 py-1.5 text-sm text-erro-texto hover:bg-erro/15"
         >
           Excluir usuário
         </button>
@@ -120,7 +121,7 @@ export function DeleteUserButton({
             className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm outline-none focus:border-signal"
           />
           {error && (
-            <p className="text-xs text-red-500" role="alert">
+            <p className="text-xs text-erro-texto" role="alert">
               {error}
             </p>
           )}
@@ -132,7 +133,7 @@ export function DeleteUserButton({
               type="button"
               onClick={handleDelete}
               disabled={confirmText !== DELETE_CONFIRMATION_WORD || isPending}
-              className="rounded-md bg-red-500 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
+              className="rounded-md bg-erro px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
             >
               {isPending ? "Excluindo..." : "Sim, excluir definitivamente"}
             </button>
@@ -168,20 +169,23 @@ function UserRow({
 
   return (
     <li className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-foreground">
-          {user.fullName ?? "Sem nome"}
-          <span className="ml-2 text-xs text-muted">{ROLE_LABEL[user.role]}</span>
-        </p>
-        <p className="truncate text-xs text-muted">{user.email ?? "e-mail não encontrado"}</p>
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar avatarUrl={user.avatarUrl} fullName={user.fullName} size="sm" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">
+            {user.fullName ?? "Sem nome"}
+            <span className="ml-2 text-xs text-muted">{ROLE_LABEL[user.role]}</span>
+          </p>
+          <p className="truncate text-xs text-muted">{user.email ?? "e-mail não encontrado"}</p>
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
         <span
           className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
             user.banned
-              ? "border-red-500/30 bg-red-500/10 text-red-500 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-400"
-              : "border-green-600/30 bg-green-600/10 text-green-600 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-400"
+              ? "border-erro/30 bg-erro/10 text-erro-texto"
+              : "border-sucesso/30 bg-sucesso/10 text-sucesso-texto"
           }`}
         >
           {user.banned ? "Bloqueado" : "Ativo"}

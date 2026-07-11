@@ -7,6 +7,7 @@ import { UserEditContent } from "../../user-edit-content";
 import {
   changeUserRoleAction,
   deleteUserAction,
+  removeUserAvatarAction,
   resetUserPasswordAction,
   setUserPasswordAction,
   toggleUserBanAction,
@@ -37,6 +38,7 @@ export default async function AccountUserEditPage({ params }: { params: Promise<
         setPassword: setUserPasswordAction.bind(null, id),
         updateProfile: updateUserProfileAction.bind(null, id),
         uploadAvatar: uploadUserAvatarAction.bind(null, id),
+        removeAvatar: removeUserAvatarAction.bind(null, id),
       }}
     />
   );

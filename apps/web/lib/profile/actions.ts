@@ -127,6 +127,40 @@ export async function uploadOwnAvatarAction(_userId: string, formData: FormData)
   return { success: true, avatarUrl };
 }
 
+// Sem parâmetro de userId (diferente de updateOwnProfileAction/
+// uploadOwnAvatarAction acima, que carregam um _userId só pra bater a
+// assinatura de N argumentos das versões Admin/SuperAdmin): aqui não sobra
+// nenhum outro argumento além dele, e um _userId sozinho como ÚLTIMO
+// parâmetro dispara no-unused-vars (a regra só ignora argumento não-usado
+// quando NÃO é o último). TypeScript aceita de boa essa assinatura mais
+// curta no lugar de `(userId: string) => ...` — quem chama (UserEmployeeDataTab)
+// sempre passa user.id, só que aqui ele é ignorado. Mesma lógica de limpeza
+// de pasta inteira de removeUserAvatarActionForAdmin (lib/users/actions.ts)
+// — ver o comentário lá sobre por que não basta apagar um path fixo.
+export async function removeOwnAvatarAction(): Promise<ActionState> {
+  const viewer = await requireRole(ANY_ROLE);
+
+  const serviceClient = createServiceClient();
+  const { data: files } = await serviceClient.storage.from("avatars").list(viewer.id);
+  if (files && files.length > 0) {
+    await serviceClient.storage.from("avatars").remove(files.map((f) => `${viewer.id}/${f.name}`));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", viewer.id);
+  if (error) return { error: `Falha ao remover foto: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId: viewer.account_id,
+    actionType: "user_avatar_removed",
+    targetType: "user",
+    targetId: viewer.id,
+  });
+  revalidatePath("/profile");
+  return { success: true };
+}
+
 // Troca de senha AUTOATENDIMENTO — usa a própria sessão (supabase.auth.
 // updateUser, client RLS-scoped), não a Admin API: é a pessoa mudando a
 // PRÓPRIA senha, diferente de um admin resetando a de outra (ver

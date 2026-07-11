@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 // action_type conhecidos até agora (lista aberta, sem enum no banco — ver
 // comentário em supabase/migrations/0014_audit_log.sql): login, logout,
 // user_created, user_role_changed, user_blocked, user_unblocked,
-// user_deleted, user_password_reset, settings_updated, report_generated,
-// competitor_created, competitor_status_changed, competitor_interval_changed,
-// competitor_check_triggered, account_status_changed, account_notes_updated.
+// user_deleted, user_password_reset, user_password_changed,
+// user_avatar_updated, user_avatar_removed, user_updated, settings_updated,
+// report_generated, competitor_created, competitor_status_changed,
+// competitor_interval_changed, competitor_check_triggered,
+// account_status_changed, account_notes_updated.
 export async function logAuditEvent(params: {
   actorUserId: string;
   accountId: string | null;

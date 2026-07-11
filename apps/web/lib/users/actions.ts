@@ -401,3 +401,41 @@ export async function uploadUserAvatarActionForAdmin(userId: string, formData: F
   revalidatePath(`/admin/users/${userId}`);
   return { success: true, avatarUrl };
 }
+
+// Lista a pasta inteira do usuário em vez de deduzir um path fixo — o
+// upload (acima) grava em {userId}/avatar.{ext}, mas a extensão muda
+// conforme o formato enviado; se o colaborador reenviar num formato
+// diferente do anterior (ex: era .jpg, virou .webp), o arquivo antigo fica
+// órfão no bucket (upsert só sobrescreve quando o path é IDÊNTICO). Listar
+// e apagar tudo que estiver na pasta garante que a remoção não deixa lixo
+// pra trás, mesmo nesse caso.
+export async function removeUserAvatarActionForAdmin(userId: string): Promise<ActionState> {
+  const viewer = await requireAccountManager();
+  const accountId = viewer.account_id!;
+  const target = await getTargetInAccount(userId, accountId);
+  if (target.error) return target;
+
+  const manageError = assertCanManage(viewer.role, target.role!);
+  if (manageError) return { error: manageError };
+
+  const serviceClient = createServiceClient();
+  const { data: files } = await serviceClient.storage.from("avatars").list(userId);
+  if (files && files.length > 0) {
+    await serviceClient.storage.from("avatars").remove(files.map((f) => `${userId}/${f.name}`));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", userId);
+  if (error) return { error: `Falha ao remover foto: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_avatar_removed",
+    targetType: "user",
+    targetId: userId,
+  });
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+  return { success: true };
+}

@@ -405,3 +405,32 @@ export async function uploadUserAvatarAction(accountId: string, userId: string, 
   revalidatePath(`/superadmin/accounts/${accountId}/users`);
   return { success: true, avatarUrl };
 }
+
+// Mesma lógica de lib/users/actions.ts (removeUserAvatarActionForAdmin) —
+// lista a pasta inteira em vez de deduzir um path fixo, pra não deixar
+// arquivo órfão se o formato da foto mudou entre uploads.
+export async function removeUserAvatarAction(accountId: string, userId: string): Promise<ActionState> {
+  const viewer = await requireRole("superadmin");
+  const guard = await assertUserBelongsToAccount(userId, accountId);
+  if (guard.error) return guard;
+
+  const serviceClient = createServiceClient();
+  const { data: files } = await serviceClient.storage.from("avatars").list(userId);
+  if (files && files.length > 0) {
+    await serviceClient.storage.from("avatars").remove(files.map((f) => `${userId}/${f.name}`));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", userId);
+  if (error) return { error: `Falha ao remover foto: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "user_avatar_removed",
+    targetType: "user",
+    targetId: userId,
+  });
+  revalidatePath(`/superadmin/accounts/${accountId}/users`);
+  return { success: true };
+}

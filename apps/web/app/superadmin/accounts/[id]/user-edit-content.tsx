@@ -31,6 +31,7 @@ interface UploadResult extends ActionResult {
 export interface UserEditActions extends UserManagementActions {
   updateProfile: (userId: string, fullName: string, email: string, birthDate: string | null) => Promise<ActionResult>;
   uploadAvatar: (userId: string, formData: FormData) => Promise<UploadResult>;
+  removeAvatar: (userId: string) => Promise<ActionResult>;
 }
 
 // Página de edição dedicada (rota própria, não modal — pedido explícito),
@@ -80,8 +81,8 @@ export function UserEditContent({
               <span
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                   user.banned
-                    ? "border-red-500/30 bg-red-500/10 text-red-500 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-400"
-                    : "border-green-600/30 bg-green-600/10 text-green-600 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-400"
+                    ? "border-erro/30 bg-erro/10 text-erro-texto"
+                    : "border-sucesso/30 bg-sucesso/10 text-sucesso-texto"
                 }`}
               >
                 {user.banned ? "Bloqueado" : "Ativo"}
@@ -107,7 +108,14 @@ export function UserEditContent({
           {(activeTab) => {
             if (activeTab === "resumo") return <UserSummaryTab user={user} />;
             if (activeTab === "dados") {
-              return <UserEmployeeDataTab user={user} onUpdateProfile={actions.updateProfile} onUploadAvatar={actions.uploadAvatar} />;
+              return (
+                <UserEmployeeDataTab
+                  user={user}
+                  onUpdateProfile={actions.updateProfile}
+                  onUploadAvatar={actions.uploadAvatar}
+                  onRemoveAvatar={actions.removeAvatar}
+                />
+              );
             }
             if (activeTab === "acessos") return <UserAccessLogTab rows={loginAudit.rows} totalCount={loginAudit.totalCount} />;
             if (activeTab === "historico") return <UserHistoryTab rows={auditLog.rows} totalCount={auditLog.totalCount} />;

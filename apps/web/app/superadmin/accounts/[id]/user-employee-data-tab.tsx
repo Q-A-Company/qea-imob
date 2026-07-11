@@ -20,10 +20,12 @@ export function UserEmployeeDataTab({
   user,
   onUpdateProfile,
   onUploadAvatar,
+  onRemoveAvatar,
 }: {
   user: AccountUser;
   onUpdateProfile: (userId: string, fullName: string, email: string, birthDate: string | null) => Promise<ActionResult>;
   onUploadAvatar: (userId: string, formData: FormData) => Promise<UploadResult>;
+  onRemoveAvatar: (userId: string) => Promise<ActionResult>;
 }) {
   const [fullName, setFullName] = useState(user.fullName ?? "");
   const [email, setEmail] = useState(user.email ?? "");
@@ -31,9 +33,11 @@ export function UserEmployeeDataTab({
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl);
   const [isSaving, startSaving] = useTransition();
   const [isUploading, startUploading] = useTransition();
+  const [isRemoving, startRemoving] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSave() {
@@ -60,6 +64,18 @@ export function UserEmployeeDataTab({
     });
   }
 
+  function handleRemove() {
+    setRemoveError(null);
+    startRemoving(async () => {
+      const result = await onRemoveAvatar(user.id);
+      if (result.error) setRemoveError(result.error);
+      // Some do fallback (iniciais) na hora, sem recarregar — mesmo padrão
+      // de atualização otimista do upload acima (setAvatarUrl direto no
+      // resultado da action, não um refresh de página).
+      else setAvatarUrl(null);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6 rounded-lg border border-surface-border bg-surface p-4">
       <div className="flex items-center gap-4">
@@ -76,8 +92,23 @@ export function UserEmployeeDataTab({
           <p className="text-[11px] text-muted">JPEG, PNG ou WebP, até 2 MB.</p>
           {isUploading && <p className="text-xs text-muted">Enviando...</p>}
           {uploadError && (
-            <p className="text-xs text-red-500" role="alert">
+            <p className="text-xs text-erro-texto" role="alert">
               {uploadError}
+            </p>
+          )}
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={isRemoving || isUploading}
+              className="w-fit text-[11px] text-muted underline decoration-dotted hover:text-erro-texto disabled:opacity-60"
+            >
+              {isRemoving ? "Removendo..." : "Remover foto"}
+            </button>
+          )}
+          {removeError && (
+            <p className="text-xs text-erro-texto" role="alert">
+              {removeError}
             </p>
           )}
         </div>
@@ -128,11 +159,11 @@ export function UserEmployeeDataTab({
           {isSaving ? "Salvando..." : "Salvar dados"}
         </button>
         {saveError && (
-          <p className="text-xs text-red-500" role="alert">
+          <p className="text-xs text-erro-texto" role="alert">
             {saveError}
           </p>
         )}
-        {saveSuccess && <p className="text-xs text-green-600 dark:text-green-400">Dados atualizados.</p>}
+        {saveSuccess && <p className="text-xs text-sucesso-texto">Dados atualizados.</p>}
       </div>
     </div>
   );
