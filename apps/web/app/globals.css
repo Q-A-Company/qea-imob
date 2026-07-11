@@ -100,6 +100,18 @@ body {
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* <dialog> aberto via showModal() (delete-user-button.tsx, delete-competitor-button.tsx,
+   e qualquer outro futuro) depende de margin:auto (herdado do UA
+   stylesheet — dialog:modal já vem com position:fixed + inset:0) pra ficar
+   centralizado na tela. O Preflight do Tailwind zera margin em todo mundo
+   (`*,::before,::after{margin:0}`), o que quebra essa centralização — sem
+   isso, o modal aparece grudado no canto superior esquerdo em vez de no
+   meio. Um seletor de elemento (`dialog`) tem especificidade maior que o
+   universal (`*`) do Preflight, então nem precisa de !important. */
+dialog {
+  margin: auto;
+}
+
 /* Elemento de assinatura do Painel: feixe de varredura no card "Mudanças
    nas últimas 24 horas". Terceira revisão — efeito "lanterna/farol": largura
    CONSTANTE (50° no total — ajustado a pedido do usuário, era 35°), com só
