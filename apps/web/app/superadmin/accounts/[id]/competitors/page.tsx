@@ -3,9 +3,9 @@ import { getAccountCompetitors } from "../get-account-competitors";
 
 const STATUS_LABEL: Record<string, string> = { ativo: "Ativo", pausado: "Pausado", erro: "Erro" };
 const STATUS_CLASS: Record<string, string> = {
-  ativo: "text-green-600 dark:text-green-400",
-  pausado: "text-amber-600 dark:text-amber-400",
-  erro: "text-red-500 dark:text-red-400",
+  ativo: "text-sucesso-texto",
+  pausado: "text-erro-texto",
+  erro: "text-erro-texto",
 };
 
 function formatDateTime(value: string | null): string {

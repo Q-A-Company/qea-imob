@@ -33,7 +33,7 @@ export default async function AccountShellLayout({
         <div className="print:hidden flex flex-wrap items-center gap-3 border-b border-surface-border bg-signal/10 px-6 py-2 text-sm">
           <span className="text-foreground">
             Visualizando: <strong>{account.name}</strong>
-            {!account.active && <span className="ml-2 text-red-500">(conta inativa)</span>}
+            {!account.active && <span className="ml-2 text-erro-texto">(conta inativa)</span>}
           </span>
           <Link href="/superadmin" className="ml-auto font-medium text-signal-text hover:underline">
             ← Voltar para Clientes

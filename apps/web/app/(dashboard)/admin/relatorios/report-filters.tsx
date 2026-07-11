@@ -236,7 +236,7 @@ export function ReportFiltersForm({
       )}
 
       {excludesAvailability && (
-        <p className="text-xs text-amber-600 dark:text-amber-400" role="status">
+        <p className="text-xs text-erro-texto" role="status">
           Direção específica ou variação mínima preenchida — mudanças de disponibilidade e imóveis adicionados (sem preço antigo pra comparar) ficam excluídos do resultado.
         </p>
       )}

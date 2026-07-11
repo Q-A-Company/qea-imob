@@ -21,7 +21,7 @@ export function RankingBars({ entries }: { entries: { label: string; sublabel?: 
               initial={{ scaleX: 0 }}
               animate={{ scaleX: e.count / max }}
               transition={{ duration: 0.4, ease: "easeOut" }}
-              style={{ transformOrigin: "left", backgroundColor: e.color ?? "var(--color-graphite)" }}
+              style={{ transformOrigin: "left", backgroundColor: e.color ?? "var(--color-grafite)" }}
               className="h-full rounded-full"
             />
           </div>
@@ -29,34 +29,5 @@ export function RankingBars({ entries }: { entries: { label: string; sublabel?: 
         </li>
       ))}
     </ul>
-  );
-}
-
-export function VerticalBars({ entries }: { entries: { label: string; count: number }[] }) {
-  const max = Math.max(1, ...entries.map((e) => e.count));
-  return (
-    <div className="flex h-24 min-w-full items-end gap-1">
-      {entries.map((e, i) => {
-        // Signal Amber é exclusivo pra sinalizar "mudança detectada" — aqui
-        // só o(s) pico(s) usa(m) a cor, o resto fica neutro (mesmo padrão de
-        // admin/volume-chart.tsx), em vez de toda barra vir colorida.
-        const isPeak = e.count > 0 && e.count === max;
-        return (
-          <div key={`${e.label}-${i}`} className="flex h-full flex-1 min-w-3 flex-col items-center justify-end gap-1">
-            <div className="flex h-full w-full items-end justify-center">
-              <motion.div
-                initial={{ scaleY: 0 }}
-                animate={{ scaleY: Math.max(0.03, e.count / max) }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                style={{ transformOrigin: "bottom" }}
-                className={`w-full max-w-4 rounded-t-sm ${isPeak ? "bg-signal" : "bg-muted/40"}`}
-                title={`${e.label}: ${e.count}`}
-              />
-            </div>
-            <span className="whitespace-nowrap text-[9px] text-muted">{e.label}</span>
-          </div>
-        );
-      })}
-    </div>
   );
 }

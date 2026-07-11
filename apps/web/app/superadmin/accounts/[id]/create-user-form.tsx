@@ -82,7 +82,7 @@ export function CreateUserForm({
       </div>
 
       {state.error && (
-        <p className="text-sm text-red-500" role="alert">
+        <p className="text-sm text-erro-texto" role="alert">
           {state.error}
         </p>
       )}

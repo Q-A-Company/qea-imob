@@ -37,7 +37,7 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
       </button>
 
       {state.error && (
-        <p className="max-w-64 text-right text-xs text-red-600 dark:text-red-400" role="alert">
+        <p className="max-w-64 text-right text-xs text-erro-texto" role="alert">
           {state.error}
         </p>
       )}
@@ -46,8 +46,8 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
         <p
           className={`max-w-64 text-right text-xs ${
             state.result.success && !state.result.stoppedEarlyDueToError
-              ? "text-green-600 dark:text-green-400"
-              : "text-amber-600 dark:text-amber-400"
+              ? "text-sucesso-texto"
+              : "text-erro-texto"
           }`}
         >
           {state.result.success

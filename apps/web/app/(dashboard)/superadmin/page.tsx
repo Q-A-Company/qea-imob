@@ -82,7 +82,7 @@ export default async function SuperAdminPage({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{account.name}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    <span className={account.active ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}>
+                    <span className={account.active ? "text-sucesso-texto" : "text-erro-texto"}>
                       {account.active ? "Ativo" : "Inativo"}
                     </span>
                     {" · "}

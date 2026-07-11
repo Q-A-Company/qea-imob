@@ -74,11 +74,11 @@ export function SelfSecurityTab({
           {isPending ? "Salvando..." : "Alterar senha"}
         </button>
         {error && (
-          <p className="text-xs text-red-500" role="alert">
+          <p className="text-xs text-erro-texto" role="alert">
             {error}
           </p>
         )}
-        {success && <p className="text-xs text-green-600 dark:text-green-400">Senha alterada.</p>}
+        {success && <p className="text-xs text-sucesso-texto">Senha alterada.</p>}
       </form>
     </section>
   );

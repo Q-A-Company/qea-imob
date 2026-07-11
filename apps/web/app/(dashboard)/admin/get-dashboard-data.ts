@@ -47,9 +47,9 @@ export interface DashboardData {
   feed: FeedItem[];
   dailyVolumes: DailyVolume[];
   breakdownByWindow: {
-    "1h": CompetitorBreakdownEntry[];
     "24h": CompetitorBreakdownEntry[];
     "7d": CompetitorBreakdownEntry[];
+    "30d": CompetitorBreakdownEntry[];
   };
   hourlyVolumes30d: HourlyVolume[];
   topVolatileProperties30d: VolatileProperty[];
@@ -60,7 +60,7 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const FETCH_PAGE_SIZE = 1000;
-const TOP_VOLATILE_LIMIT = 8;
+const TOP_VOLATILE_LIMIT = 5; // top 5 — cabe compacto na coluna de gráficos ao lado do feed
 
 interface PropertyRef {
   id: string;
@@ -135,7 +135,7 @@ const EMPTY_DASHBOARD_DATA: Omit<DashboardData, "hasCompetitors" | "activeCompet
   changes24h: 0,
   changes7d: 0,
   feed: [],
-  breakdownByWindow: { "1h": [], "24h": [], "7d": [] },
+  breakdownByWindow: { "24h": [], "7d": [], "30d": [] },
   hourlyVolumes30d: Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 })),
   topVolatileProperties30d: [],
 };
@@ -201,14 +201,15 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
   const volatilityCounts = new Map<string, VolatileProperty>();
   const feed: FeedItem[] = [];
 
-  // Contagem por concorrente nas 3 janelas — acumulada num Map por
-  // competitorId, uma passada só pelos changes (já filtrados pra 30d, a
-  // janela mais larga buscada; 1h/24h/7d são subconjuntos filtrados por
-  // idade dentro do próprio loop).
+  // Contagem por concorrente nas 3 janelas do seletor do gráfico de pizza
+  // (24h/7d/30d) — acumulada num Map por competitorId, uma passada só pelos
+  // changes (já filtrados pra 30d, a janela mais larga buscada; 24h/7d são
+  // subconjuntos filtrados por idade dentro do próprio loop; 30d é sempre
+  // todo mundo, já que o fetch inteiro já é essa janela).
   const countsByWindow = {
-    "1h": new Map<string, number>(),
     "24h": new Map<string, number>(),
     "7d": new Map<string, number>(),
+    "30d": new Map<string, number>(),
   };
 
   for (const change of changes) {
@@ -230,9 +231,10 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
     const property = propertyById.get(change.property_id);
     if (property) {
       const competitorId = property.competitor_id;
+      // 30d sempre conta — o fetch inteiro já é essa janela (sinceIso).
+      countsByWindow["30d"].set(competitorId, (countsByWindow["30d"].get(competitorId) ?? 0) + 1);
       if (isWithin7d) countsByWindow["7d"].set(competitorId, (countsByWindow["7d"].get(competitorId) ?? 0) + 1);
       if (isWithin24h) countsByWindow["24h"].set(competitorId, (countsByWindow["24h"].get(competitorId) ?? 0) + 1);
-      if (isWithin1h) countsByWindow["1h"].set(competitorId, (countsByWindow["1h"].get(competitorId) ?? 0) + 1);
 
       const volatilityKey = `${competitorId}:${property.external_id}`;
       const volatilityEntry = volatilityCounts.get(volatilityKey);
@@ -289,9 +291,9 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
     feed,
     dailyVolumes,
     breakdownByWindow: {
-      "1h": buildBreakdown(countsByWindow["1h"]),
       "24h": buildBreakdown(countsByWindow["24h"]),
       "7d": buildBreakdown(countsByWindow["7d"]),
+      "30d": buildBreakdown(countsByWindow["30d"]),
     },
     hourlyVolumes30d,
     topVolatileProperties30d,

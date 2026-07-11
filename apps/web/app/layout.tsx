@@ -1,28 +1,42 @@
 import type { Metadata } from "next";
-import { Manrope, IBM_Plex_Mono, Fraunces } from "next/font/google";
+import localFont from "next/font/local";
+import { IBM_Plex_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 
-const manrope = Manrope({
+// BR Sonoma — fonte de marca do Q&A Imob, substitui Manrope (corpo/UI) E
+// Fraunces (título/saudação): uma família só, cobrindo toda a hierarquia
+// tipográfica do produto (--font-display, em globals.css, aponta pra esta
+// mesma variável — não existe mais uma segunda família só pra títulos).
+// Arquivos com licença de uso web confirmada, em apps/web/public/fonts/.
+// IBM Plex Mono continua isolada pros números tabulares, sem mudança.
+const brSonoma = localFont({
+  src: [
+    { path: "../public/fonts/BRSonoma-Thin-BF654c45255ffe0.otf", weight: "100", style: "normal" },
+    { path: "../public/fonts/BRSonoma-ThinItalic-BF654c45268d3f9.otf", weight: "100", style: "italic" },
+    { path: "../public/fonts/BRSonoma-ExtraLight-BF654c45265af8d.otf", weight: "200", style: "normal" },
+    { path: "../public/fonts/BRSonoma-ExtraLightItalic-BF654c4525a5046.otf", weight: "200", style: "italic" },
+    { path: "../public/fonts/BRSonoma-Light-BF654c452608e0f.otf", weight: "300", style: "normal" },
+    { path: "../public/fonts/BRSonoma-LightItalic-BF654c45266aa83.otf", weight: "300", style: "italic" },
+    { path: "../public/fonts/BRSonoma-Regular-BF654c45266c042.otf", weight: "400", style: "normal" },
+    { path: "../public/fonts/BRSonoma-RegularItalic-BF654c452681c11.otf", weight: "400", style: "italic" },
+    { path: "../public/fonts/BRSonoma-Medium-BF654c45266edd1.otf", weight: "500", style: "normal" },
+    { path: "../public/fonts/BRSonoma-MediumItalic-BF654c45267d45f.otf", weight: "500", style: "italic" },
+    { path: "../public/fonts/BRSonoma-SemiBold-BF654c45268c340.otf", weight: "600", style: "normal" },
+    { path: "../public/fonts/BRSonoma-SemiBoldItalic-BF654c452696350.otf", weight: "600", style: "italic" },
+    { path: "../public/fonts/BRSonoma-Bold-BF654c4526823f5.otf", weight: "700", style: "normal" },
+    { path: "../public/fonts/BRSonoma-BoldItalic-BF654c4525c9c27.otf", weight: "700", style: "italic" },
+    { path: "../public/fonts/BRSonoma-Black-BF654c4525506bf.otf", weight: "900", style: "normal" },
+    { path: "../public/fonts/BRSonoma-BlackItalic-BF654c45268988e.otf", weight: "900", style: "italic" },
+  ],
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-numeric",
   weight: ["500", "600", "700"],
   subsets: ["latin"],
-});
-
-// Serifada de destaque, só para títulos/saudação — contraste de caráter
-// contra a Manrope (corpo) e a IBM Plex Mono (números). Variável, com
-// personalidade (detalhes "wonky"), não uma serifada de sistema genérica.
-const fraunces = Fraunces({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -53,7 +67,7 @@ export default async function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${manrope.variable} ${plexMono.variable} ${fraunces.variable} h-full antialiased ${isDark ? "dark" : ""}`}
+      className={`${brSonoma.variable} ${plexMono.variable} h-full antialiased ${isDark ? "dark" : ""}`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

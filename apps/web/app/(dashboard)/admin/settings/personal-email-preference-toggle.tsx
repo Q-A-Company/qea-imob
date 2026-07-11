@@ -34,7 +34,7 @@ export function PersonalEmailPreferenceToggle({ initialEnabled }: { initialEnabl
           Preferência pessoal — vale só pra você, mesmo que o e-mail esteja ligado pra sua conta.
         </p>
         {error && (
-          <p className="mt-1.5 text-xs text-red-500" role="alert">
+          <p className="mt-1.5 text-xs text-erro-texto" role="alert">
             {error}
           </p>
         )}
@@ -45,8 +45,8 @@ export function PersonalEmailPreferenceToggle({ initialEnabled }: { initialEnabl
         disabled={isPending}
         className={`shrink-0 rounded-md border px-3 py-1.5 text-sm disabled:opacity-60 ${
           enabled
-            ? "border-green-600/40 bg-green-600/10 text-green-600 hover:bg-green-600/15 dark:border-green-400/40 dark:bg-green-400/10 dark:text-green-400"
-            : "border-amber-600/40 bg-amber-600/10 text-amber-600 hover:bg-amber-600/15 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-400"
+            ? "border-sucesso/40 bg-sucesso/10 text-sucesso-texto hover:bg-sucesso/15"
+            : "border-erro/40 bg-erro/10 text-erro-texto hover:bg-erro/15"
         }`}
       >
         {isPending ? "Aguarde..." : enabled ? "Ligado" : "Desligado"}

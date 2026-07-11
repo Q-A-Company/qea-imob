@@ -60,10 +60,10 @@ export default async function AccountErrorsPage({
                         {run.competitorName}
                         <span className="ml-2 text-xs font-normal text-muted">{RUN_TYPE_LABEL[run.runType] ?? run.runType}</span>
                         {!run.success && (
-                          <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">FALHOU</span>
+                          <span className="ml-2 rounded bg-erro/10 px-1.5 py-0.5 text-[10px] font-semibold text-erro-texto">FALHOU</span>
                         )}
                         {run.stoppedEarlyDueToError && (
-                          <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                          <span className="ml-2 rounded bg-erro/10 px-1.5 py-0.5 text-[10px] font-semibold text-erro-texto">
                             PAROU CEDO
                           </span>
                         )}

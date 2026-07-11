@@ -11,8 +11,8 @@ export function AccountStatusToggle({ accountId, active }: { accountId: string; 
   const [error, setError] = useState<string | null>(null);
 
   const toneClass = active
-    ? "border-amber-600/40 bg-amber-600/10 text-amber-600 hover:bg-amber-600/15 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:bg-amber-400/15"
-    : "border-green-600/40 bg-green-600/10 text-green-600 hover:bg-green-600/15 dark:border-green-400/40 dark:bg-green-400/10 dark:text-green-400 dark:hover:bg-green-400/15";
+    ? "border-erro/40 bg-erro/10 text-erro-texto hover:bg-erro/15"
+    : "border-sucesso/40 bg-sucesso/10 text-sucesso-texto hover:bg-sucesso/15";
 
   function handleClick() {
     setError(null);
@@ -33,7 +33,7 @@ export function AccountStatusToggle({ accountId, active }: { accountId: string; 
         {isPending ? "Aguarde..." : active ? "Desativar conta" : "Ativar conta"}
       </button>
       {error && (
-        <p className="max-w-48 text-right text-[11px] text-red-500" role="alert">
+        <p className="max-w-48 text-right text-[11px] text-erro-texto" role="alert">
           {error}
         </p>
       )}

@@ -90,7 +90,7 @@ export function RegisterCompetitorForm() {
         </div>
 
         {resolveError && (
-          <p className="text-sm text-red-500" role="alert">
+          <p className="text-sm text-erro-texto" role="alert">
             {resolveError}
           </p>
         )}
@@ -171,19 +171,19 @@ export function RegisterCompetitorForm() {
       )}
 
       {state.error && (
-        <p className="text-sm text-red-500" role="alert">
+        <p className="text-sm text-erro-texto" role="alert">
           {state.error}
         </p>
       )}
 
       {state.learningError && (
-        <p className="text-sm text-amber-600 dark:text-amber-400" role="alert">
+        <p className="text-sm text-erro-texto" role="alert">
           {state.learningError}
         </p>
       )}
 
       {justResolved && lastAction === "confirmed" && (
-        <p className="text-sm text-green-600 dark:text-green-400" role="status">
+        <p className="text-sm text-sucesso-texto" role="status">
           Concorrente ativado — checagens de preço vão rodar normalmente a partir de agora.
         </p>
       )}

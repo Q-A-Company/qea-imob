@@ -43,7 +43,7 @@ export function IntervalSelect({ competitorId, minutes }: { competitorId: string
         ))}
       </select>
       {error && (
-        <p className="max-w-40 text-right text-[11px] text-red-500" role="alert">
+        <p className="max-w-40 text-right text-[11px] text-erro-texto" role="alert">
           {error}
         </p>
       )}

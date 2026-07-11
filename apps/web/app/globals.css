@@ -5,34 +5,62 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Paleta — ver o plano de design da Etapa 10 (dashboard) para o racional
-     de cada cor. Signal Amber é EXCLUSIVO de "mudança detectada" — nunca
-     decorativo em outro lugar. */
-  --color-signal: #ffb020; /* accent decorativo + texto no modo escuro (contraste ~10.5:1 sobre --color-abyss) */
-  --color-signal-text-light: #946000; /* variante de texto no modo claro (contraste ~4.98:1 sobre --color-mist, AA) */
-  --color-abyss: #0b0f14; /* fundo base modo escuro */
-  --color-mist: #f6f7f9; /* fundo base modo claro */
-  --color-ink: #0f1620; /* texto primário modo claro */
-  --color-fog: #e7ecf1; /* texto primário modo escuro */
-  --color-graphite: #5b6673; /* texto secundário/ícones/bordas nos dois modos */
+  /* Paleta própria do Q&A Imob (valores exatos fornecidos, não estimativa
+     visual — ver conversa de definição da paleta). --color-sinal é
+     EXCLUSIVO de "mudança detectada"/ação principal — nunca decorativo em
+     outro lugar. sinal/erro/sucesso são declarados aqui só como REFERÊNCIA
+     (valor cheio, mesmo nos dois modos — usados a baixa opacidade em
+     fundo/borda, não precisam variar); a variante de TEXTO de cada uma
+     (--erro-text/--sucesso-text/--signal-text mais abaixo) é que muda
+     entre :root e .dark, porque o valor cheio sozinho não bate 4,5:1 de
+     contraste contra --color-noite (calculado — ver .dark abaixo). */
+  --color-sinal: #625cbb;
+  --color-erro: #883a38; /* avisos e erros */
+  --color-sucesso: #507707;
 
-  --background: var(--color-mist);
-  --foreground: var(--color-ink);
+  --color-noite: #1a1a19; /* fundo geral modo escuro */
+  --color-alvorada: #fafaf8; /* fundo geral modo claro */
+  --color-tinta: #1f1d1b; /* texto primário modo claro */
+  --color-neve: #f5f4f2; /* texto primário modo escuro */
+  --color-grafite: #8e8d89; /* texto secundário/ícones/bordas nos dois modos */
+
+  --color-grafico-roxo: #625cbb; /* gráficos agregados (não organizados por concorrente) — paleta categórica de concorrentes fica intacta em lib/categorical-colors.ts */
+  --color-grafico-azul: #3f72b4;
+
+  --background: var(--color-alvorada);
+  --foreground: var(--color-tinta);
   --surface: #ffffff;
-  --surface-border: color-mix(in srgb, var(--color-graphite) 20%, transparent);
-  --muted: var(--color-graphite);
-  --signal-text: var(--color-signal-text-light);
-  --signal: var(--color-signal);
+  --surface-border: color-mix(in srgb, var(--color-grafite) 20%, transparent);
+  --muted: var(--color-grafite);
+  --signal: var(--color-sinal);
+  --signal-text: var(--color-sinal); /* já passa AA (~5,3:1) sobre --color-alvorada */
+  --erro: var(--color-erro);
+  --erro-text: var(--color-erro); /* ~7,4:1 sobre --color-alvorada */
+  --sucesso: var(--color-sucesso);
+  --sucesso-text: var(--color-sucesso); /* ~5,1:1 sobre --color-alvorada */
+  /* Fundo só da sidebar/nav lateral — precisa mudar por modo (relatado:
+     ficava preto mesmo no modo claro). Branco no claro (mesmo tom do
+     --surface dos cards, distinguido pela borda) — no escuro é mais
+     escuro que o fundo geral (--color-noite), então aqui espelha isso
+     ficando mais claro que o fundo geral em vez de repetir o mesmo tom. */
+  --nav: #ffffff;
 }
 
 .dark {
-  --background: var(--color-abyss);
-  --foreground: var(--color-fog);
-  --surface: #141b23;
-  --surface-border: color-mix(in srgb, var(--color-graphite) 35%, transparent);
-  --muted: var(--color-graphite);
-  --signal-text: var(--color-signal);
-  --signal: var(--color-signal);
+  --background: var(--color-noite);
+  --foreground: var(--color-neve);
+  --surface: #212024;
+  --surface-border: color-mix(in srgb, var(--color-grafite) 35%, transparent);
+  --muted: var(--color-grafite);
+  /* Variantes clareadas (mesmo H/S da cor base, só mais claras) — a cor
+     cheia sozinha não bate 4,5:1 contra --color-noite (calculado: sinal
+     3,12:1, erro 2,25:1, sucesso 3,30:1, todos abaixo de AA). fundo/borda
+     (--signal/--erro/--sucesso) continuam com o valor cheio — só usados a
+     baixa opacidade, não precisam da variante clara. */
+  --signal-text: #7f7ac7; /* ~4,57:1 sobre --color-noite */
+  --erro-text: #c16a67; /* ~4,58:1 sobre --color-noite */
+  --sucesso-text: #71a90a; /* ~6,12:1 sobre --color-noite */
+  --nav: #0d0d0d;
 }
 
 @theme inline {
@@ -44,11 +72,26 @@
   --color-signal: var(--signal);
   --color-signal-text: var(--signal-text);
   /* Texto sobre fundo preenchido com --color-signal (ex: botão de CTA) —
-     sempre escuro, nos dois temas, porque o Signal Amber é sempre claro. */
-  --color-signal-on: var(--color-abyss);
+     sempre claro, nos dois temas: diferente do Signal Amber antigo (sempre
+     claro), --color-sinal é um roxo médio/escuro (luminância baixa), então
+     texto escuro em cima não teria contraste (calculado: ~3,0:1, abaixo de
+     AA) — só texto claro funciona (~5,1:1). */
+  --color-signal-on: var(--color-neve);
+  --color-erro: var(--erro);
+  --color-erro-texto: var(--erro-text);
+  --color-sucesso: var(--sucesso);
+  --color-sucesso-texto: var(--sucesso-text);
+  --color-nav: var(--nav);
+  --color-grafico-roxo: var(--color-grafico-roxo);
+  --color-grafico-azul: var(--color-grafico-azul);
   --font-sans: var(--font-body);
   --font-mono: var(--font-numeric);
-  --font-display: var(--font-display);
+  /* BR Sonoma substituiu tanto o corpo (Manrope) quanto o título/saudação
+     (Fraunces) — não há mais uma segunda família de destaque, mas o token
+     font-display continua existindo (aponta pra --font-body) pra não
+     precisar caçar e trocar a classe em cada lugar que já usava
+     font-display; documenta intenção mesmo sendo a mesma fonte física. */
+  --font-display: var(--font-body);
 }
 
 body {
@@ -57,14 +100,19 @@ body {
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Elemento de assinatura da Etapa 10: varredura de radar atrás da faixa de
-   KPIs. A grade (::before) é estática; a linha de varredura (::after) gira
-   devagar e continuamente, na mesma cor (--color-signal) que marca uma
-   mudança detectada quando ela aparece no feed — o radar procura na mesma
-   cor do que encontra. Confinado a essa única zona da tela, opacidade
-   baixa o suficiente pra não competir com o conteúdo por cima. Congela
-   automaticamente com prefers-reduced-motion (regra global acima já reduz
-   animation-duration para todos os elementos). */
+/* Elemento de assinatura do Painel: feixe de varredura no card "Mudanças
+   nas últimas 24 horas". Terceira revisão — efeito "lanterna/farol": largura
+   CONSTANTE (50° no total — ajustado a pedido do usuário, era 35°), com só
+   as duas pontas (8° cada) suavizadas pra transparente; o miolo (8°–42°)
+   fica "chapado" na mesma opacidade do início ao fim, sem nenhum stop
+   intermediário reduzindo — diferente da versão anterior ("cometa", fade
+   progressivo ao longo de todo o arco).
+   A máscara radial (fade por DISTÂNCIA do centro, não por ângulo) segue
+   igual — resolveu de vez a borda reta aparecendo nos cantos do card
+   retangular, não depende da forma do feixe em si. Congela automaticamente
+   com prefers-reduced-motion (regra global abaixo já reduz
+   animation-duration pra todos os elementos) — a forma do feixe já fica
+   visível parada, sem tratamento extra. */
 .radar-sweep {
   position: absolute;
   inset: 0;
@@ -72,24 +120,86 @@ body {
   pointer-events: none;
   border-radius: inherit;
 }
-.radar-sweep::before {
-  content: "";
-  position: absolute;
-  inset: -50%;
-  background: repeating-radial-gradient(circle at center, var(--color-graphite) 0, transparent 1px, transparent 48px);
-  opacity: 0.07;
-}
 .radar-sweep::after {
   content: "";
   position: absolute;
-  inset: -50%;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--color-signal) 6deg, transparent 50deg);
-  opacity: 0.14;
-  animation: radar-spin 11s linear infinite;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--color-sinal) 65%, transparent) 8deg,
+    color-mix(in srgb, var(--color-sinal) 65%, transparent) 42deg,
+    transparent 50deg,
+    transparent 360deg
+  );
+  /* conic-gradient colore por ÂNGULO — ao longo de um raio, a cor é
+     uniforme do centro até a borda da caixa. Num card retangular (não
+     quadrado), os cantos ficam bem mais longe do centro que o meio das
+     bordas; quando o feixe varre um canto, a cor chegava perto o bastante
+     da borda real do card pra essa borda (sempre reta/nítida, por ser um
+     elemento de verdade) ficar visível contra a área colorida — lido como
+     "corte reto" no feixe, mas na verdade era a borda do card aparecendo.
+     A máscara radial abaixo apaga o feixe por DISTÂNCIA do centro,
+     garantindo que ele sempre desapareça bem antes de alcançar qualquer
+     borda, em qualquer direção — independente da proporção do card. */
+  mask-image: radial-gradient(ellipse at center, black 0%, black 45%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 0%, black 45%, transparent 80%);
+  animation: radar-spin 9s linear infinite;
 }
 @keyframes radar-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Blips de radar — um ponto por concorrente ativo, posicionado ao redor do
+   círculo (ver RadarBlips em dashboard-client.tsx, que calcula --blip-angle,
+   --blip-delay e --blip-radius por ponto). rotate(--blip-angle)
+   translateY(--blip-radius) é o mesmo truque de posicionar-em-círculo-sem-
+   trigonometria usado noutros lugares: gira o sistema de coordenadas e
+   empurra o ponto "pra cima" nessa nova direção, na mesma convenção
+   horário-a-partir-de-12h do conic-gradient/rotate() do feixe acima — então
+   o cálculo de delay bate certo com a posição visual. --blip-radius varia
+   por ponto (20–32px, ver pseudoRandomFraction em dashboard-client.tsx) só
+   pra evitar todos ficarem no mesmo círculo perfeito (com 2 blips
+   diametralmente opostos e mesmo raio, formavam uma reta óbvia passando
+   pelo centro); a faixa inteira fica dentro da zona 100% visível da máscara
+   radial do feixe (que só começa a apagar depois de 45% da distância ao
+   centro), então os blips nunca ficam pré-esmaecidos pela máscara, só pela
+   própria animação de pisca. Repouso em opacity:0 (totalmente invisível,
+   não só esmaecido) — só aparece durante a janela estreita em que o feixe
+   passa por cima, ver keyframe abaixo. --blip-angle/--blip-radius precisam
+   estar DENTRO do keyframe (não só na declaração base) porque a animação
+   anima `transform` inteiro — sem repetir rotate/translateY em cada estado
+   do keyframe, o pulso de scale substituiria a posição em vez de só somar a
+   ela. */
+.radar-blip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  border-radius: 50%;
+  background: var(--color-sinal);
+  opacity: 0;
+  pointer-events: none;
+  transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1);
+  animation: radar-blip-pulse 9s linear infinite;
+  animation-delay: var(--blip-delay);
+}
+@keyframes radar-blip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1.4);
+    box-shadow: 0 0 5px 1px var(--color-sinal);
+  }
+  5%,
+  95% {
+    opacity: 0;
+    transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1);
+    box-shadow: none;
   }
 }
 

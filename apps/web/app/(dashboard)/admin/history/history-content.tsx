@@ -27,17 +27,17 @@ interface StatusInfo {
 
 function statusInfo(run: { success: boolean; stoppedEarlyDueToError: boolean }): StatusInfo {
   if (!run.success) {
-    return { label: "Falhou", className: "border-red-500/30 bg-red-500/10 text-red-500 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-400" };
+    return { label: "Falhou", className: "border-erro/30 bg-erro/10 text-erro-texto" };
   }
   if (run.stoppedEarlyDueToError) {
     return {
       label: "Parcial",
-      className: "border-amber-600/30 bg-amber-600/10 text-amber-600 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400",
+      className: "border-erro/30 bg-erro/10 text-erro-texto",
     };
   }
   return {
     label: "Sucesso",
-    className: "border-green-600/30 bg-green-600/10 text-green-600 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-400",
+    className: "border-sucesso/30 bg-sucesso/10 text-sucesso-texto",
   };
 }
 

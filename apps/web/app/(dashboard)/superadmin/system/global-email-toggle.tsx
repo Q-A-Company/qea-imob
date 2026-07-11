@@ -43,15 +43,15 @@ export function GlobalEmailToggle({ initialEnabled, initialUpdatedAt }: { initia
           disabled={isPending}
           className={`shrink-0 rounded-md border px-3 py-1.5 text-sm disabled:opacity-60 ${
             enabled
-              ? "border-green-600/40 bg-green-600/10 text-green-600 hover:bg-green-600/15 dark:border-green-400/40 dark:bg-green-400/10 dark:text-green-400"
-              : "border-red-500/40 bg-red-500/10 text-red-500 hover:bg-red-500/15"
+              ? "border-sucesso/40 bg-sucesso/10 text-sucesso-texto hover:bg-sucesso/15"
+              : "border-erro/40 bg-erro/10 text-erro-texto hover:bg-erro/15"
           }`}
         >
           {isPending ? "Aguarde..." : enabled ? "Ligado" : "Desligado"}
         </button>
       </div>
       {error && (
-        <p className="text-xs text-red-500" role="alert">
+        <p className="text-xs text-erro-texto" role="alert">
           {error}
         </p>
       )}

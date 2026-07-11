@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { colorForCompetitor } from "@/lib/categorical-colors";
+import { InfoTooltip } from "../info-tooltip";
 import type { CompetitorBreakdownEntry } from "./get-dashboard-data";
 
-type Window = "1h" | "24h" | "7d";
+type Window = "24h" | "7d" | "30d";
 const WINDOWS: { key: Window; label: string }[] = [
-  { key: "1h", label: "1h" },
   { key: "24h", label: "24h" },
   { key: "7d", label: "7 dias" },
+  { key: "30d", label: "30 dias" },
 ];
 
 function buildConicGradient(entries: CompetitorBreakdownEntry[]): string {
@@ -30,7 +31,9 @@ function buildConicGradient(entries: CompetitorBreakdownEntry[]): string {
 // lib/categorical-colors.ts) — a mesma cor sempre, em qualquer gráfico/tela,
 // entre sessões. Distribuição por concorrente numa janela selecionável
 // responde a uma pergunta diferente do gráfico de barras (tendência no
-// tempo): "quem está mudando mais preço, agora".
+// tempo): "quem está mudando mais preço, agora". Janelas 24h/7d/30d (era
+// 1h/24h/7d) — 1h ficava vazio demais na prática (poucas mudanças por
+// hora), 30d dá uma leitura mais útil por padrão.
 export function CompetitorPieChart({
   breakdownByWindow,
 }: {
@@ -41,10 +44,13 @@ export function CompetitorPieChart({
   const total = entries.reduce((sum, e) => sum + e.count, 0);
 
   return (
-    <div className="rounded-lg border border-surface-border bg-surface p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted">Mudanças por concorrente</h3>
-        <div className="flex gap-1 rounded-md border border-surface-border p-0.5">
+    <div className="flex h-full flex-col rounded-lg border border-surface-border bg-surface p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted">
+          Mudanças por concorrente
+          <InfoTooltip text="Distribuição das mudanças detectadas entre os concorrentes, na janela de tempo selecionada." />
+        </h3>
+        <div className="flex shrink-0 gap-1 rounded-md border border-surface-border p-0.5">
           {WINDOWS.map((w) => (
             <button
               key={w.key}
@@ -61,19 +67,19 @@ export function CompetitorPieChart({
       </div>
 
       {total === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">Nenhuma mudança nessa janela.</p>
+        <p className="py-6 text-center text-sm text-muted">Nenhuma mudança nessa janela.</p>
       ) : (
-        <div className="flex items-center gap-6">
+        <div className="flex min-h-0 flex-1 items-center gap-4 overflow-hidden">
           <motion.div
             key={selected}
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
-            className="h-32 w-32 shrink-0 rounded-full"
+            className="h-20 w-20 shrink-0 rounded-full"
             style={{ background: buildConicGradient(entries) }}
             aria-hidden
           />
-          <ul className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <ul className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto">
             {entries.map((e) => (
               <li key={e.competitorId} className="flex items-center gap-2 text-sm" title={e.name}>
                 <span

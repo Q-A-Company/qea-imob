@@ -11,7 +11,7 @@ function formatDateTime(value: string): string {
 function NotificationChannelRow({ label, enabled }: { label: string; enabled: boolean }) {
   return (
     <p className="text-sm text-foreground">
-      {label}: <span className={enabled ? "text-green-600 dark:text-green-400" : "text-muted"}>{enabled ? "Ligado" : "Desligado"}</span>
+      {label}: <span className={enabled ? "text-sucesso-texto" : "text-muted"}>{enabled ? "Ligado" : "Desligado"}</span>
     </p>
   );
 }
@@ -37,7 +37,7 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
         <p>Concorrentes: {data.competitorsCount}</p>
         <p>Usuários: {data.usersCount}</p>
         {data.pendingReviewCount > 0 && (
-          <p className="font-medium text-amber-600 dark:text-amber-400">
+          <p className="font-medium text-erro-texto">
             {data.pendingReviewCount} config. de site aguardando revisão
           </p>
         )}

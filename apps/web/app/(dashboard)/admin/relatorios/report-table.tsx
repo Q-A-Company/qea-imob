@@ -74,14 +74,22 @@ export function ReportTable({
                     </span>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">{row.externalId}</td>
-                  <td className="px-3 py-2 text-xs text-foreground print:!text-black">
-                    {row.changeType === "price"
-                      ? "Preço"
-                      : row.changeType === "added"
-                        ? "Adicionado"
-                        : row.changeType === "removed"
-                          ? "Possiv. vendido"
-                          : "Reapareceu"}
+                  <td className="px-3 py-2 text-xs print:!text-black">
+                    {row.changeType === "price" ? (
+                      <span className="text-foreground print:!text-black">Preço</span>
+                    ) : row.changeType === "added" ? (
+                      <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
+                        Adicionado
+                      </span>
+                    ) : row.changeType === "removed" ? (
+                      <span className="rounded-full bg-erro/15 px-2 py-0.5 font-medium text-erro-texto print:!bg-transparent print:!text-black">
+                        Possiv. vendido
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
+                        Reapareceu
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs print:!text-black">
                     {row.changeType === "price" ? (
@@ -92,7 +100,7 @@ export function ReportTable({
                         <span className="text-muted print:!text-black">({formatDelta(row.oldPrice, row.newPrice)})</span>
                       </span>
                     ) : row.changeType === "added" ? (
-                      <span className="font-semibold text-signal-text print:!text-black">{formatBRL(row.newPrice)}</span>
+                      <span className="font-semibold text-sucesso-texto print:!text-black">{formatBRL(row.newPrice)}</span>
                     ) : (
                       "—"
                     )}

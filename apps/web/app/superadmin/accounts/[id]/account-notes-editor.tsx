@@ -51,9 +51,9 @@ export function AccountNotesEditor({ accountId, initialNotes }: { accountId: str
         >
           {isPending ? "Salvando..." : "Salvar notas"}
         </button>
-        {status === "saved" && <span className="text-xs text-green-600 dark:text-green-400">Salvo.</span>}
+        {status === "saved" && <span className="text-xs text-sucesso-texto">Salvo.</span>}
         {status === "error" && (
-          <span className="text-xs text-red-500" role="alert">
+          <span className="text-xs text-erro-texto" role="alert">
             {error}
           </span>
         )}

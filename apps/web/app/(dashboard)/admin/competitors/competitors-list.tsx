@@ -18,9 +18,9 @@ export interface CompetitorRow {
 const STATUS_LABEL: Record<string, string> = { ativo: "Ativo", pausado: "Pausado", erro: "Erro" };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  ativo: "border-green-600/30 bg-green-600/10 text-green-600 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-400",
-  pausado: "border-amber-600/30 bg-amber-600/10 text-amber-600 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400",
-  erro: "border-red-500/30 bg-red-500/10 text-red-500 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-400",
+  ativo: "border-sucesso/30 bg-sucesso/10 text-sucesso-texto",
+  pausado: "border-erro/30 bg-erro/10 text-erro-texto",
+  erro: "border-erro/30 bg-erro/10 text-erro-texto",
 };
 
 function formatDateTime(value: string | null) {
