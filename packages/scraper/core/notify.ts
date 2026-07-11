@@ -5,6 +5,11 @@ export interface NotifyParams {
   title: string;
   message: string;
   propertyChangeId?: string;
+  // Habilita mostrar o avatar do concorrente na UI (abreviação + cor
+  // categórica) — diferente de propertyChangeId, existe pros 3 tipos de
+  // notificação que não têm property_change_id (pausado, degradado,
+  // recalibração) mas ainda são sobre um concorrente específico.
+  competitorId?: string;
 }
 
 export interface NotifyResult {
@@ -40,6 +45,7 @@ export async function createNotification(supabase: SupabaseClient, params: Notif
     const { error } = await supabase.from("notifications").insert({
       account_id: params.accountId,
       property_change_id: params.propertyChangeId ?? null,
+      competitor_id: params.competitorId ?? null,
       title: params.title,
       message: params.message,
     });

@@ -48,7 +48,12 @@ export const HtmlCssSiteConfig = z.object({
   card_selector: z
     .string()
     .describe("Seletor CSS do container de cada card de imóvel, relativo ao documento inteiro"),
-  external_id: FieldSelector.describe("Referência/código externo do imóvel"),
+  external_id: FieldSelector.describe(
+    "Identificador TÉCNICO estável do imóvel, usado só internamente pra reconhecer o mesmo imóvel entre checagens — nunca é mostrado pro usuário. Pode ser ilegível (ex: um ID interno numérico)."
+  ),
+  reference_code: FieldSelector.nullable().describe(
+    "Seletor pro código/referência VISÍVEL do imóvel — o que a imobiliária reconhece (ex: 'CI0298', 'mu9536'), mostrado nas telas pro usuário final. Pode ser diferente de external_id (que prioriza estabilidade técnica, não legibilidade) ou apontar pro mesmo elemento, se ele já for legível. null se o site não mostra nenhum código reconhecível em lugar nenhum do card — não invente um substituto."
+  ),
   price: PriceSelector.describe("Preço do imóvel"),
   property_url: FieldSelector.describe("Link para a página individual do imóvel (attribute deve ser 'href')"),
   pagination: Pagination,
@@ -111,7 +116,15 @@ export const JsonApiSiteConfig = z.object({
     .string()
     .nullable()
     .describe("Caminho até o total de imóveis (mesma notação com '.'), usado para saber quando parar de paginar; null se não existir"),
-  external_id_field: z.string().describe("Campo do item com a referência/código do imóvel"),
+  external_id_field: z
+    .string()
+    .describe("Campo do item com o identificador TÉCNICO estável do imóvel — uso interno, nunca mostrado pro usuário, pode ser ilegível."),
+  reference_code_field: z
+    .string()
+    .nullable()
+    .describe(
+      "Campo do item com o código/referência VISÍVEL do imóvel (mesma notação com '.' de total_field) — o que a imobiliária reconhece, mostrado nas telas. Pode ser o mesmo campo de external_id_field quando ele já for legível (ex: um campo 'codigo'/'referencia' textual, não um ID numérico interno), ou um campo diferente. null se não existir um código legível separado."
+    ),
   price_field: z.string().describe("Campo do item com o preço numérico"),
   price_unavailable_field: z
     .string()

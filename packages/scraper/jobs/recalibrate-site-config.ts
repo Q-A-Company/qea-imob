@@ -88,6 +88,7 @@ export async function recalibrateSiteConfig(competitorId: string): Promise<Recal
 
   await createNotification(supabase, {
     accountId: competitor.account_id,
+    competitorId,
     title: activated
       ? `Concorrente recalibrado: ${competitor.name}`
       : `Recalibração pendente de revisão: ${competitor.name}`,

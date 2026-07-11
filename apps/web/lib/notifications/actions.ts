@@ -19,6 +19,20 @@ export async function markNotificationReadAction(notificationId: string): Promis
   revalidatePath("/", "layout");
 }
 
+// Reverte markNotificationReadAction — hoje só existia marcar como lida,
+// sem volta. Mesma checagem de posse (RLS via account_members_update_own,
+// não reverificação manual): compartilhado por conta, não por usuário
+// (decisão confirmada — ver conversa; leitura individual por usuário
+// ficaria pra uma opção b, só se algum cliente pedir de verdade).
+export async function markNotificationUnreadAction(notificationId: string): Promise<void> {
+  const profile = await getProfile();
+  if (!profile || !profile.account_id) return;
+
+  const supabase = await createClient();
+  await supabase.from("notifications").update({ read: false }).eq("id", notificationId);
+  revalidatePath("/", "layout");
+}
+
 export async function markAllNotificationsReadAction(): Promise<void> {
   const profile = await getProfile();
   if (!profile || !profile.account_id) return;

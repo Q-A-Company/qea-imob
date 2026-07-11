@@ -9,11 +9,13 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
+  Server,
   Settings,
   Target,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { AccountMenu } from "./account-menu";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
@@ -40,9 +42,6 @@ interface NavItem {
 // /admin/* ou /user/* separadas — ver o trade-off registrado no README
 // (rotas espelhadas, não uma rota só com `if` de role: mantém /admin/*
 // como invariante "só Admin entra", auditável sem abrir cada página).
-// Notificações NÃO tem item aqui de propósito — só é alcançável pelo sino
-// no header (ver notification-bell-client.tsx), pra não duplicar acesso à
-// mesma informação em dois lugares do chrome.
 function buildNavItems(role: UserRole): NavItem[] {
   const base = role === "usuario" ? "/user" : "/admin";
   const items: NavItem[] = [
@@ -53,8 +52,8 @@ function buildNavItems(role: UserRole): NavItem[] {
       href: ROLE_HOME[role],
       roles: ["admin", "gerente", "usuario", "superadmin"],
     },
-    { key: "historico", label: "Histórico", icon: History, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
     { key: "relatorios", label: "Relatórios", icon: BarChart3, href: `${base}/relatorios`, roles: ["admin", "gerente", "usuario"] },
+    { key: "historico", label: "Histórico", icon: History, href: `${base}/history`, roles: ["admin", "gerente", "usuario"] },
     { key: "concorrentes", label: "Concorrentes", icon: Target, href: "/admin/competitors", roles: ["admin", "gerente"] },
     // Gerente também gerencia usuários (só que com teto: não cria/gerencia
     // outro gerente/admin — restrição aplicada nas Server Actions, ver
@@ -66,7 +65,16 @@ function buildNavItems(role: UserRole): NavItem[] {
     // isso é controlado dentro da própria página, não pelo requireRole daqui.
     { key: "configuracoes", label: "Configurações", icon: Settings, href: `${base}/settings`, roles: ["admin", "gerente", "usuario"] },
     // Plataforma inteira, não escopado a nenhuma conta — só SuperAdmin.
-    { key: "sistema", label: "Sistema", icon: Settings, href: "/superadmin/system", roles: ["superadmin"] },
+    // Ícone Server (não Settings) de propósito — distinto do item
+    // "Configurações" pessoal logo abaixo, que também usa uma engrenagem
+    // (mesmo ícone que os outros roles usam pra config pessoal); os dois
+    // apareceriam idênticos lado a lado se usassem o mesmo ícone.
+    { key: "sistema", label: "Sistema", icon: Server, href: "/superadmin/system", roles: ["superadmin"] },
+    // Configuração PESSOAL do SuperAdmin (hoje só Aparência) — distinta de
+    // "Sistema" acima (config global da plataforma). Sem essa rota, o
+    // SuperAdmin não teria como trocar de tema depois que o toggle saiu do
+    // header removido.
+    { key: "configuracoes-superadmin", label: "Configurações", icon: Settings, href: "/superadmin/settings", roles: ["superadmin"] },
   ];
   return items.filter((item) => item.roles.includes(role));
 }
@@ -87,10 +95,14 @@ export function Sidebar({
   role,
   pinned,
   onTogglePin,
+  fullName,
+  avatarUrl,
 }: {
   role: UserRole;
   pinned: boolean;
   onTogglePin: () => void;
+  fullName: string | null;
+  avatarUrl: string | null;
 }) {
   const pathname = usePathname();
   const items = buildNavItems(role);
@@ -107,7 +119,7 @@ export function Sidebar({
           decide a margem reservada, olhando o mesmo cookie no servidor. */}
       <nav
         aria-label="Navegação principal"
-        className={`print:hidden group fixed inset-y-0 left-0 z-30 hidden flex-col gap-1 overflow-hidden border-r border-surface-border bg-nav py-4 transition-[width] duration-200 ease-out md:flex ${
+        className={`print:hidden group fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-surface-border bg-nav py-4 transition-[width] duration-200 ease-out md:flex ${
           pinned ? "w-56" : "w-16 hover:w-56 focus-within:w-56"
         }`}
       >
@@ -141,7 +153,16 @@ export function Sidebar({
             {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </button>
         </div>
-        <ul className="flex flex-col gap-1 px-2">
+        {/* overflow-x-hidden explícito — sem isso, overflow-y-auto sozinho
+            força overflow-x para "auto" também (regra da spec de CSS: um
+            eixo não-visible obriga o outro a deixar de ser visible), e o
+            <span> do rótulo de cada item vaza horizontalmente quando
+            recolhido (largura real do texto, só opacity-0, não width:0 —
+            necessário pra transição suave ao expandir). Antes vazava pro
+            overflow-hidden do <nav> pai sem barra visível; com scrollbar
+            customizada (sempre visível), isso virou uma barra horizontal
+            visível bem feia. Nunca deveria existir scroll horizontal aqui. */}
+        <ul className="flex flex-col gap-1 overflow-y-auto overflow-x-hidden px-2">
           {items.map((item) => {
             const active = pathname === item.href;
             return (
@@ -153,7 +174,7 @@ export function Sidebar({
                   href={item.href}
                   onClick={blurOnMouseClick}
                   className={`group/navlink flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
-                    active ? "bg-signal/10 text-signal-text" : "text-muted hover:bg-background hover:text-foreground"
+                    active ? "bg-foreground/5 text-foreground" : "text-muted hover:bg-background hover:text-foreground"
                   }`}
                 >
                   <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
@@ -163,10 +184,24 @@ export function Sidebar({
             );
           })}
         </ul>
+
+        {/* Rodapé fixo (mt-auto empurra pro fim da coluna flex) — chip de
+            conta (avatar + nome + cargo), migrado do header removido; abre
+            um popover com Configurações/Sair (ver account-menu.tsx). Linha
+            divisória separa visualmente dos itens de navegação acima.
+            Notificações não mora mais aqui — voltou pro canto superior
+            direito (ver dashboard-chrome.tsx), a pedido do usuário. */}
+        <div className="mt-auto border-t border-surface-border px-2 pt-2">
+          <AccountMenu fullName={fullName} avatarUrl={avatarUrl} role={role} variant="row" labelOpacityClass={labelOpacityClass} />
+        </div>
       </nav>
 
       {/* Mobile: bottom nav fixo, só ícones — mais natural que hambúrguer
-          pra 2-5 itens, e não depende de hover (dispositivo de toque). */}
+          pra 2-5 itens, e não depende de hover (dispositivo de toque). O
+          chip de conta (Configurações/Sair) entra como último item, mesmo
+          popover de cima. Notificações não entra aqui — o sino flutuante
+          (dashboard-chrome.tsx) já cobre mobile também, sendo fixed em
+          viewport, não só desktop. */}
       <nav
         aria-label="Navegação principal"
         className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-nav py-1 md:hidden"
@@ -189,6 +224,7 @@ export function Sidebar({
             </Link>
           );
         })}
+        <AccountMenu fullName={fullName} avatarUrl={avatarUrl} role={role} variant="compact" />
       </nav>
     </>
   );

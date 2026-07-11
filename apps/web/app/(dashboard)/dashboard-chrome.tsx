@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
+import { NotificationBellClient } from "./notification-bell-client";
+import { AutoRefresh } from "./auto-refresh";
+import type { NotificationBellData } from "./notification-bell";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Estado do pin vive AQUI (client), não só no cookie + reload do layout.tsx
@@ -17,10 +20,16 @@ import type { UserRole } from "@/lib/supabase/types";
 export function DashboardChrome({
   role,
   initialPinned,
+  fullName,
+  avatarUrl,
+  notificationData,
   children,
 }: {
   role: UserRole;
   initialPinned: boolean;
+  fullName: string | null;
+  avatarUrl: string | null;
+  notificationData: NotificationBellData | null;
   children: React.ReactNode;
 }) {
   const [pinned, setPinned] = useState(initialPinned);
@@ -35,7 +44,21 @@ export function DashboardChrome({
 
   return (
     <>
-      <Sidebar role={role} pinned={pinned} onTogglePin={togglePin} />
+      <AutoRefresh />
+      <Sidebar role={role} pinned={pinned} onTogglePin={togglePin} fullName={fullName} avatarUrl={avatarUrl} />
+      {/* Sino flutuante — canto superior direito, fora da sidebar, sem
+          reintroduzir uma barra horizontal. null quando o role não tem
+          conta associada (SuperAdmin fora do escopo de uma conta) — mesmo
+          caso em que o sino nunca aparecia no header antigo. */}
+      {notificationData && (
+        <div className="fixed right-4 top-4 z-40 print:hidden">
+          <NotificationBellClient
+            notifications={notificationData.notifications}
+            unreadCount={notificationData.unreadCount}
+            viewAllHref={notificationData.viewAllHref}
+          />
+        </div>
+      )}
       {/* pl-16/pl-56 reserva exatamente a largura atual da sidebar — ela
           expande por cima (overlay, position fixed em sidebar.tsx). transition
           aqui acompanha a animação de largura da própria sidebar, então o

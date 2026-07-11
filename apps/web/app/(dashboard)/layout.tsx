@@ -2,9 +2,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/dal";
 import { DashboardChrome } from "./dashboard-chrome";
-import { Header } from "./header";
-import { NotificationBell } from "./notification-bell";
+import { getNotificationBellData } from "./notification-bell";
 
+// Header removido (pedido do usuário) — perfil, notificações e sair
+// migraram pro rodapé da sidebar (ver sidebar.tsx). Conteúdo de cada
+// página começa direto do topo agora, sem barra acima do <main>.
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
@@ -17,17 +19,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const cookieStore = await cookies();
   const sidebarPinned = cookieStore.get("sidebar-pinned")?.value !== "false";
 
+  const notificationData = profile.account_id ? await getNotificationBellData(profile.account_id, profile.role) : null;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <DashboardChrome role={profile.role} initialPinned={sidebarPinned}>
-        <Header
-          fullName={profile.full_name}
-          role={profile.role}
-          avatarUrl={profile.avatar_url}
-          notificationSlot={
-            profile.account_id ? <NotificationBell accountId={profile.account_id} role={profile.role} /> : null
-          }
-        />
+      <DashboardChrome
+        role={profile.role}
+        initialPinned={sidebarPinned}
+        fullName={profile.full_name}
+        avatarUrl={profile.avatar_url}
+        notificationData={notificationData}
+      >
         <main className="p-6 print:p-0">{children}</main>
       </DashboardChrome>
     </div>

@@ -5,7 +5,8 @@ import type { PropertyChangeType } from "@/lib/supabase/types";
 export interface FeedItem {
   id: string;
   competitorName: string;
-  externalId: string;
+  referenceCode: string | null;
+  url: string;
   changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -34,7 +35,8 @@ export interface HourlyVolume {
 export interface VolatileProperty {
   competitorId: string;
   abbreviation: string;
-  externalId: string;
+  referenceCode: string | null;
+  url: string;
   count: number;
 }
 
@@ -65,6 +67,8 @@ const TOP_VOLATILE_LIMIT = 5; // top 5 — cabe compacto na coluna de gráficos 
 interface PropertyRef {
   id: string;
   external_id: string;
+  reference_code: string | null;
+  url: string;
   competitor_id: string;
 }
 
@@ -94,7 +98,7 @@ async function fetchAllProperties(
   for (;;) {
     const { data, error } = await supabase
       .from("properties")
-      .select("id, external_id, competitor_id")
+      .select("id, external_id, reference_code, url, competitor_id")
       .in("competitor_id", competitorIds)
       .range(offset, offset + FETCH_PAGE_SIZE - 1);
     if (error) throw new Error(`Falha ao buscar imóveis: ${error.message}`);
@@ -236,6 +240,9 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
       if (isWithin7d) countsByWindow["7d"].set(competitorId, (countsByWindow["7d"].get(competitorId) ?? 0) + 1);
       if (isWithin24h) countsByWindow["24h"].set(competitorId, (countsByWindow["24h"].get(competitorId) ?? 0) + 1);
 
+      // Agrupamento continua por external_id (chave técnica estável) — só o
+      // que é exibido no resultado (referenceCode/url) muda pro campo de
+      // exibição.
       const volatilityKey = `${competitorId}:${property.external_id}`;
       const volatilityEntry = volatilityCounts.get(volatilityKey);
       if (volatilityEntry) volatilityEntry.count++;
@@ -243,7 +250,8 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
         volatilityCounts.set(volatilityKey, {
           competitorId,
           abbreviation: competitorMeta.get(competitorId)?.abbreviation ?? "???",
-          externalId: property.external_id,
+          referenceCode: property.reference_code,
+          url: property.url,
           count: 1,
         });
 
@@ -251,7 +259,8 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
         feed.push({
           id: change.id,
           competitorName: competitorMeta.get(competitorId)?.name ?? "Concorrente removido",
-          externalId: property.external_id,
+          referenceCode: property.reference_code,
+          url: property.url,
           changeType: change.change_type,
           oldPrice: change.old_price,
           newPrice: change.new_price,

@@ -1,5 +1,6 @@
 import { RankingBars } from "../mini-charts";
 import { InfoTooltip } from "../info-tooltip";
+import { PropertyReferenceLink } from "../property-reference-link";
 import { colorForCompetitor } from "@/lib/categorical-colors";
 import type { VolatileProperty } from "./get-dashboard-data";
 
@@ -17,8 +18,8 @@ export function VolatilePropertiesCard({ properties }: { properties: VolatilePro
       ) : (
         <RankingBars
           entries={properties.map((p) => ({
-            label: p.externalId,
-            sublabel: `${p.abbreviation} · ${p.externalId}`,
+            label: <PropertyReferenceLink referenceCode={p.referenceCode} url={p.url} />,
+            sublabel: `${p.abbreviation} · ${p.referenceCode ?? "sem código"}`,
             count: p.count,
             color: colorForCompetitor(p.competitorId),
           }))}

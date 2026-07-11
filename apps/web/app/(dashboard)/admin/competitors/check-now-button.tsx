@@ -42,7 +42,14 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
         </p>
       )}
 
-      {state.result && (
+      {state.result && state.result.skippedAlreadyRunning && (
+        <p className="max-w-64 text-right text-xs text-muted">
+          Já existe uma checagem em andamento para este concorrente (provavelmente o scheduler automático) — aguarde ela
+          terminar.
+        </p>
+      )}
+
+      {state.result && !state.result.skippedAlreadyRunning && (
         <p
           className={`max-w-64 text-right text-xs ${
             state.result.success && !state.result.stoppedEarlyDueToError

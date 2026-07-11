@@ -78,6 +78,12 @@ export function extractFromHtml(
     const rawUrl = readField($card, $, config.property_url);
     if (!rawUrl) return;
 
+    // config.reference_code pode ser null (site sem nenhum código visível
+    // identificado durante o aprendizado) — nesse caso nem tenta ler, fica
+    // null pra todo imóvel deste concorrente. Quando o seletor existe mas
+    // não bate neste card específico, readField já devolve null sozinho.
+    const rawReferenceCode = config.reference_code ? readField($card, $, config.reference_code) : null;
+
     const isSobConsulta =
       rawPrice !== null &&
       config.price.sob_consulta_markers.some((marker) => rawPrice.toLowerCase().includes(marker.toLowerCase()));
@@ -96,6 +102,7 @@ export function extractFromHtml(
 
     properties.push({
       external_id: normalizeExternalId(externalId),
+      reference_code: rawReferenceCode ? normalizeExternalId(rawReferenceCode) : null,
       price,
       price_status: priceStatus,
       url: resolveUrl(rawUrl, listingUrl),

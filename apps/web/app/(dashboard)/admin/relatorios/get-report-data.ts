@@ -48,10 +48,14 @@ export interface ReportFilters {
 
 export interface ReportRow {
   id: string;
+  // Chave técnica estável do imóvel (properties.id) — só pra deduplicar
+  // "imóveis únicos alterados" no indicador abaixo, nunca exibida.
+  propertyId: string;
   competitorId: string;
   competitorName: string;
   competitorAbbreviation: string;
-  externalId: string;
+  referenceCode: string | null;
+  url: string;
   changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -85,7 +89,7 @@ const EMPTY_INDICATORS: ReportIndicators = {
 // existiam aqui (por dia, por hora, imóveis voláteis, direção por
 // concorrente) foram removidos/movidos — ver report-charts.tsx.
 function computeIndicators(filtered: ReportRow[]): ReportIndicators {
-  const uniqueProperties = new Set(filtered.map((r) => `${r.competitorId}:${r.externalId}`));
+  const uniqueProperties = new Set(filtered.map((r) => r.propertyId));
 
   const byCompetitorMap = new Map<string, { name: string; abbreviation: string; count: number }>();
   for (const row of filtered) {
@@ -151,13 +155,17 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   // um query builder do supabase-js só pode ser resolvido (`await`) uma
   // vez, não dá pra reaproveitar o mesmo objeto entre páginas.
   function buildPropertiesQuery(offset: number) {
-    let q = supabase.from("properties").select("id, external_id, competitor_id, status").in("competitor_id", targetCompetitorIds);
+    let q = supabase
+      .from("properties")
+      .select("id, external_id, reference_code, url, competitor_id, status")
+      .in("competitor_id", targetCompetitorIds);
     if (filters.status !== "ambos") q = q.eq("status", filters.status);
     if (filters.search) q = q.ilike("external_id", `%${filters.search}%`);
     return q.range(offset, offset + PROPERTIES_FETCH_PAGE_SIZE - 1);
   }
 
-  const properties: { id: string; external_id: string; competitor_id: string; status: string }[] = [];
+  const properties: { id: string; external_id: string; reference_code: string | null; url: string; competitor_id: string; status: string }[] =
+    [];
   for (let offset = 0; ; offset += PROPERTIES_FETCH_PAGE_SIZE) {
     const { data, error: propertiesError } = await buildPropertiesQuery(offset);
     if (propertiesError) throw new Error(`Falha ao buscar imóveis: ${propertiesError.message}`);
@@ -219,10 +227,12 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     const meta = competitorMeta.get(property.competitor_id);
     return {
       id: change.id,
+      propertyId: property.id,
       competitorId: property.competitor_id,
       competitorName: meta?.name ?? "Concorrente removido",
       competitorAbbreviation: meta?.abbreviation ?? "???",
-      externalId: property.external_id,
+      referenceCode: property.reference_code,
+      url: property.url,
       changeType: change.change_type,
       oldPrice: change.old_price,
       newPrice: change.new_price,

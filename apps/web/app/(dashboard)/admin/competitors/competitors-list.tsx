@@ -16,6 +16,11 @@ export interface CompetitorRow {
   status: string;
   lastCheckedAt: string | null;
   pollingIntervalMinutes: number;
+  // Menor intervalo seguro pra ESTE concorrente (duração média das
+  // últimas checagens limpas × 2, ver scraper/core/polling-interval.ts) —
+  // desabilita opções abaixo disso no IntervalSelect. 5 (o menor degrau)
+  // pra quem ainda não tem checagem limpa nenhuma.
+  minPollingIntervalMinutes: number;
 }
 
 const STATUS_LABEL: Record<string, string> = { ativo: "Ativo", pausado: "Pausado", erro: "Erro", arquivado: "Arquivado" };
@@ -126,7 +131,11 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
                     </>
                   ) : (
                     <>
-                      <IntervalSelect competitorId={competitor.id} minutes={competitor.pollingIntervalMinutes} />
+                      <IntervalSelect
+                        competitorId={competitor.id}
+                        minutes={competitor.pollingIntervalMinutes}
+                        minMinutes={competitor.minPollingIntervalMinutes}
+                      />
                       <StatusToggle competitorId={competitor.id} status={competitor.status} />
                       <CheckNowButton competitorId={competitor.id} />
                       <ArchiveButton competitorId={competitor.id} />

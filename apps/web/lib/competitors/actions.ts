@@ -3,11 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
+import { minimumSafeIntervalMinutes } from "scraper/core/polling-interval";
 import { ALLOWED_POLLING_INTERVALS } from "./constants";
 import { normalizeListingUrl } from "./normalize-url";
 import { logAuditEvent } from "@/lib/audit/log";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/types";
 
 export interface CheckCompetitorNowState {
   result?: {
@@ -20,6 +24,7 @@ export interface CheckCompetitorNowState {
     reactivatedAfterSuccess: boolean;
     configMarkedDegraded: boolean;
     errorMessage: string | null;
+    skippedAlreadyRunning: boolean;
   };
   error?: string;
 }
@@ -79,6 +84,7 @@ export async function checkCompetitorNowAction(
         reactivatedAfterSuccess: result.reactivatedAfterSuccess,
         configMarkedDegraded: result.configMarkedDegraded,
         errorMessage: result.errorMessage,
+        skippedAlreadyRunning: result.skippedAlreadyRunning,
       },
     };
   } catch (err) {
@@ -138,15 +144,10 @@ export async function registerCompetitorAction(
   const name = String(formData.get("name") ?? "").trim();
   const abbreviation = String(formData.get("abbreviation") ?? "").trim().toUpperCase();
   const listingUrl = String(formData.get("listingUrl") ?? "").trim();
-  const pollingIntervalRaw = String(formData.get("pollingIntervalMinutes") ?? "");
-  const pollingIntervalMinutes = Number(pollingIntervalRaw);
 
   if (!name) return { error: "Nome é obrigatório" };
   if (!abbreviation || abbreviation.length > 6) return { error: "Abreviação precisa ter entre 1 e 6 caracteres" };
   if (!listingUrl || !listingUrl.startsWith("http")) return { error: "URL da listagem inválida" };
-  if (!ALLOWED_POLLING_INTERVALS.includes(pollingIntervalMinutes as (typeof ALLOWED_POLLING_INTERVALS)[number])) {
-    return { error: `Intervalo precisa ser um dos valores permitidos: ${ALLOWED_POLLING_INTERVALS.join(", ")} min` };
-  }
 
   const supabase = await createClient();
 
@@ -171,6 +172,14 @@ export async function registerCompetitorAction(
     return { error: `"${existing.name}" já está cadastrado nesta conta com esta URL.` };
   }
 
+  // polling_interval_minutes NÃO vem do formulário de propósito — pedir
+  // pro Admin escolher "no escuro" no cadastro não fazia sentido depois
+  // que o intervalo passou a ser calculado a partir da duração REAL
+  // medida (maybeAdjustPollingInterval, check-competitor.ts): a primeira
+  // checagem completa já ajusta sozinha se precisar, exatamente como as
+  // reavaliações seguintes. Nasce no default da coluna (5min, o menor
+  // degrau — ver migration 0001) e sobe sozinho se a duração medida
+  // exigir mais margem.
   const { data: competitor, error: insertError } = await supabase
     .from("competitors")
     .insert({
@@ -178,7 +187,6 @@ export async function registerCompetitorAction(
       name,
       abbreviation,
       listing_url: listingUrl,
-      polling_interval_minutes: pollingIntervalMinutes,
       status: "ativo",
     })
     .select("id")
@@ -253,6 +261,46 @@ export interface ConfirmSiteConfigState {
   success?: boolean;
 }
 
+// Mutação de verdade, compartilhada entre o Admin (self-service, cliente
+// RLS-scoped) e o SuperAdmin (em nome de qualquer conta, service role) —
+// nenhum dos dois duplica o UPDATE, só a checagem de posse/autorização em
+// volta muda por chamador.
+async function activateSiteConfig(supabase: SupabaseClient<Database>, siteConfigId: string): Promise<{ error?: string }> {
+  const { error } = await supabase
+    .from("site_configs")
+    .update({ status: "ativo", last_validated_at: new Date().toISOString() })
+    .eq("id", siteConfigId);
+  if (error) return { error: `Falha ao ativar: ${error.message}` };
+  return {};
+}
+
+// Mesmo raciocínio de activateSiteConfig acima — mutação única
+// (apagar o concorrente inteiro, cascade cuida do site_config junto),
+// compartilhada entre Admin e SuperAdmin. Só é segura quando o
+// site_config pendente é version=1 (cadastro recém-criado, sem nenhum
+// properties/scraper_runs real ainda) — ver rejectPendingRecalibration
+// abaixo pro caso de uma recalibração (version>1) de um concorrente que
+// JÁ está ativo com histórico de verdade, onde apagar o concorrente
+// inteiro destruiria esse histórico só porque a recalibração não presta.
+async function discardCompetitor(supabase: SupabaseClient<Database>, competitorId: string): Promise<{ error?: string }> {
+  const { error } = await supabase.from("competitors").delete().eq("id", competitorId);
+  if (error) return { error: `Falha ao descartar: ${error.message}` };
+  return {};
+}
+
+// Rejeita só a recalibração pendente (apaga a linha de site_configs
+// específica) — o concorrente e o site_config ativo anterior (a versão
+// mais recente com status='ativo', que continua existindo) ficam
+// intocados. Distinto de discardCompetitor: aquele é pra cadastro novo
+// sem histórico pra perder; este é pra quando JÁ existe uma versão ativa
+// funcionando e a recalibração automática (Etapa 7) gerou algo pior/
+// incompatível que não deve substituir a versão que já funciona.
+async function rejectPendingRecalibration(supabase: SupabaseClient<Database>, siteConfigId: string): Promise<{ error?: string }> {
+  const { error } = await supabase.from("site_configs").delete().eq("id", siteConfigId);
+  if (error) return { error: `Falha ao rejeitar recalibração: ${error.message}` };
+  return {};
+}
+
 // Ativa um site_config que estava 'pendente_revisao' depois do Admin
 // revisar a prévia de cobertura/confiança na tela.
 export async function confirmSiteConfigAction(siteConfigId: string): Promise<ConfirmSiteConfigState> {
@@ -274,11 +322,8 @@ export async function confirmSiteConfigAction(siteConfigId: string): Promise<Con
     return { error: "Configuração não encontrada ou não pertence à sua conta" };
   }
 
-  const { error } = await supabase
-    .from("site_configs")
-    .update({ status: "ativo", last_validated_at: new Date().toISOString() })
-    .eq("id", siteConfigId);
-  if (error) return { error: `Falha ao ativar: ${error.message}` };
+  const result = await activateSiteConfig(supabase, siteConfigId);
+  if (result.error) return result;
 
   revalidatePath("/admin/competitors");
   return { success: true };
@@ -303,10 +348,94 @@ export async function discardSiteConfigAction(competitorId: string): Promise<Dis
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
   }
 
-  const { error } = await supabase.from("competitors").delete().eq("id", competitorId);
-  if (error) return { error: `Falha ao descartar: ${error.message}` };
+  const result = await discardCompetitor(supabase, competitorId);
+  if (result.error) return result;
 
   revalidatePath("/admin/competitors");
+  return { success: true };
+}
+
+// Variantes SuperAdmin — mesma mutação (activateSiteConfig/discardCompetitor
+// acima), autorização diferente: requireRole("superadmin") em vez de posse
+// de conta, service role (bypassa RLS, mesmo padrão já usado em
+// superadmin/accounts/[id]/actions.ts) em vez do cliente RLS-scoped, e
+// accountId vem explícito (a tela de origem já sabe de qual conta é o
+// site_config sendo revisado) — só usado pra reverificar posse contra o
+// que está no banco, nunca confiado sozinho.
+export async function confirmSiteConfigActionForSuperAdmin(siteConfigId: string, accountId: string): Promise<ConfirmSiteConfigState> {
+  const profile = await requireRole("superadmin");
+  const supabase = createServiceClient();
+
+  const { data: siteConfig } = await supabase.from("site_configs").select("id, competitor_id").eq("id", siteConfigId).single();
+  const { data: competitor } = siteConfig
+    ? await supabase.from("competitors").select("account_id, name").eq("id", siteConfig.competitor_id).single()
+    : { data: null };
+
+  if (!siteConfig || !competitor || competitor.account_id !== accountId) {
+    return { error: "Configuração não encontrada ou não pertence a esta conta" };
+  }
+
+  const result = await activateSiteConfig(supabase, siteConfigId);
+  if (result.error) return result;
+
+  // Ação cruzando contas (SuperAdmin em nome de uma conta que não é a
+  // dele) — auditada, diferente das versões Admin acima (self-service
+  // dentro da própria conta, já implicitamente rastreável por quem tem
+  // acesso a ela).
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId,
+    actionType: "site_config_confirmed_by_superadmin",
+    targetType: "site_config",
+    targetId: siteConfigId,
+    details: { competitorName: competitor.name },
+  });
+
+  revalidatePath(`/superadmin/accounts/${accountId}/settings`);
+  return { success: true };
+}
+
+// Recebe siteConfigId (não competitorId) de propósito — version só está no
+// site_config, e é ela que decide QUAL mutação rodar: version=1 (cadastro
+// recém-criado, sem histórico) apaga o concorrente inteiro; version>1
+// (recalibração de um concorrente que já tem versão ativa) rejeita só essa
+// linha de site_configs, preservando o concorrente/histórico/versão ativa
+// anterior intactos. Ver comentário em rejectPendingRecalibration acima —
+// essa distinção é a correção de um risco real que existiria se
+// discardCompetitor fosse reaproveitado sem checar version primeiro.
+export async function discardSiteConfigActionForSuperAdmin(siteConfigId: string, accountId: string): Promise<DiscardSiteConfigState> {
+  const profile = await requireRole("superadmin");
+  const supabase = createServiceClient();
+
+  const { data: siteConfig } = await supabase
+    .from("site_configs")
+    .select("id, competitor_id, version")
+    .eq("id", siteConfigId)
+    .single();
+  const { data: competitor } = siteConfig
+    ? await supabase.from("competitors").select("id, account_id, name").eq("id", siteConfig.competitor_id).single()
+    : { data: null };
+
+  if (!siteConfig || !competitor || competitor.account_id !== accountId) {
+    return { error: "Configuração não encontrada ou não pertence a esta conta" };
+  }
+
+  const isFreshRegistration = siteConfig.version === 1;
+  const result = isFreshRegistration
+    ? await discardCompetitor(supabase, competitor.id)
+    : await rejectPendingRecalibration(supabase, siteConfigId);
+  if (result.error) return result;
+
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId,
+    actionType: "site_config_discarded_by_superadmin",
+    targetType: isFreshRegistration ? "competitor" : "site_config",
+    targetId: isFreshRegistration ? competitor.id : siteConfigId,
+    details: { competitorName: competitor.name, competitorDeleted: isFreshRegistration, version: siteConfig.version },
+  });
+
+  revalidatePath(`/superadmin/accounts/${accountId}/settings`);
   return { success: true };
 }
 
@@ -361,7 +490,11 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-const ID_CHUNK_SIZE = 500;
+// 500 causou "TypeError: fetch failed" (não um 400 do PostgREST — falha de
+// rede mais cedo, provável limite de tamanho de URL/header) reproduzido
+// contra dados reais em get-run-changes.ts, que tinha o mesmo valor.
+// Testado empiricamente: 350 funciona, 400 falha. 200 com boa margem.
+const ID_CHUNK_SIZE = 200;
 
 export interface DeleteCompetitorState {
   error?: string;
@@ -446,6 +579,31 @@ export async function updateCompetitorIntervalAction(competitorId: string, minut
   const { data: competitor } = await supabase.from("competitors").select("id, account_id, name").eq("id", competitorId).single();
   if (!competitor || competitor.account_id !== profile.account_id) {
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
+  }
+
+  // Reforço no servidor — o <select> (interval-select.tsx) já desabilita
+  // opções abaixo do mínimo seguro, mas isso é só client-side; sem checar
+  // de novo aqui, dava pra forçar um valor inseguro direto pela action
+  // (DevTools, chamada manual). Mesmo cálculo de maybeAdjustPollingInterval
+  // (packages/scraper/jobs/check-competitor.ts) — duração média das
+  // últimas checagens limpas deste concorrente.
+  const { data: recentRuns } = await supabase
+    .from("scraper_runs")
+    .select("duration_ms")
+    .eq("competitor_id", competitorId)
+    .eq("run_type", "checagem")
+    .eq("success", true)
+    .eq("stopped_early_due_to_error", false)
+    .not("duration_ms", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(3);
+  const durations = (recentRuns ?? []).map((r) => r.duration_ms as number);
+  if (durations.length > 0) {
+    const avgDurationMs = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+    const minSafe = minimumSafeIntervalMinutes(avgDurationMs).minutes;
+    if (minutes < minSafe) {
+      return { error: `Intervalo mínimo seguro para este concorrente é ${minSafe} min (duração média medida das últimas checagens).` };
+    }
   }
 
   const { error } = await supabase.from("competitors").update({ polling_interval_minutes: minutes }).eq("id", competitorId);

@@ -1,9 +1,9 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
-import { Header } from "@/app/(dashboard)/header";
 import { getAccountBanner } from "./get-account-banner";
-import { AccountSidebar } from "./account-sidebar";
+import { AccountShellChrome } from "./account-shell-chrome";
 
 // Shell próprio, fora de app/(dashboard)/ de propósito — layouts do Next.js
 // sempre aninham pela posição real no sistema de arquivos, sem exceção; se
@@ -25,11 +25,21 @@ export default async function AccountShellLayout({
   const account = await getAccountBanner(id);
   if (!account) notFound();
 
+  // Mesmo cookie "sidebar-pinned" lido em (dashboard)/layout.tsx — uma
+  // preferência de UI só, compartilhada entre a navegação por role e esta
+  // navegação escopada à conta.
+  const cookieStore = await cookies();
+  const sidebarPinned = cookieStore.get("sidebar-pinned")?.value !== "false";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AccountSidebar accountId={id} />
-      <div className="pb-16 md:pb-0 md:pl-16 print:pb-0 print:pl-0">
-        <Header fullName={profile.full_name} role={profile.role} avatarUrl={profile.avatar_url} notificationSlot={null} />
+      <AccountShellChrome
+        accountId={id}
+        initialPinned={sidebarPinned}
+        fullName={profile.full_name}
+        avatarUrl={profile.avatar_url}
+        role={profile.role}
+      >
         <div className="print:hidden flex flex-wrap items-center gap-3 border-b border-surface-border bg-signal/10 px-6 py-2 text-sm">
           <span className="text-foreground">
             Visualizando: <strong>{account.name}</strong>
@@ -40,7 +50,7 @@ export default async function AccountShellLayout({
           </Link>
         </div>
         <main className="p-6 print:p-0">{children}</main>
-      </div>
+      </AccountShellChrome>
     </div>
   );
 }

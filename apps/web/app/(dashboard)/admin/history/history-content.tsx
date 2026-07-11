@@ -46,7 +46,17 @@ function statusInfo(run: { success: boolean; stoppedEarlyDueToError: boolean }):
 // mostrando exatamente quais property_changes cada execução gerou (migration
 // 0016, scraper_run_id) — antes só dava pra ver a CONTAGEM de mudanças, não
 // quais.
-export async function HistoryContent({ accountId, page, basePath }: { accountId: string; page: number; basePath: string }) {
+export async function HistoryContent({
+  accountId,
+  page,
+  basePath,
+  subtitle = "Execuções de checagem e recalibração dos concorrentes da sua conta.",
+}: {
+  accountId: string;
+  page: number;
+  basePath: string;
+  subtitle?: string;
+}) {
   const supabase = await createClient();
 
   const { data: competitors, error: competitorsError } = await supabase
@@ -88,7 +98,7 @@ export async function HistoryContent({ accountId, page, basePath }: { accountId:
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold text-foreground">Histórico</h1>
-        <p className="mt-1 text-sm text-muted">Execuções de checagem e recalibração dos concorrentes da sua conta.</p>
+        <p className="mt-1 text-sm text-muted">{subtitle}</p>
       </div>
 
       {(!runs || runs.length === 0) && <p className="text-sm text-muted">Nenhuma execução registrada ainda.</p>}

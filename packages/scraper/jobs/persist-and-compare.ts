@@ -4,6 +4,7 @@ import type { ExtractedProperty } from "../core/types.js";
 interface PropertyRow {
   id: string;
   external_id: string;
+  reference_code: string | null;
   current_price: number | null;
   price_status: "valor" | "sob_consulta";
   status: "ativo" | "possivelmente_vendido";
@@ -14,6 +15,11 @@ export type ChangeType = "price" | "added" | "removed" | "reappeared";
 export interface DetectedChange {
   propertyChangeId: string;
   externalId: string;
+  // Código visível pra exibição (feed, notificações, relatórios) — null
+  // quando o site não expõe nenhum código reconhecível pra este imóvel.
+  // externalId acima continua existindo só como identificador técnico
+  // interno, nunca deveria ser mostrado pro usuário final.
+  referenceCode: string | null;
   changeType: ChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -55,7 +61,7 @@ async function fetchAllExistingProperties(supabase: SupabaseClient, competitorId
   for (;;) {
     const { data, error } = await supabase
       .from("properties")
-      .select("id, external_id, current_price, price_status, status")
+      .select("id, external_id, reference_code, current_price, price_status, status")
       .eq("competitor_id", competitorId)
       .range(offset, offset + FETCH_PAGE_SIZE - 1);
     if (error) throw new Error(`Falha ao buscar properties existentes: ${error.message}`);
@@ -79,6 +85,21 @@ export async function persistAndDetectChanges(
   const now = new Date();
   const nowIso = now.toISOString();
 
+  // Primeira captura bem-sucedida de um concorrente (nenhuma property
+  // existia antes desta execução) não é uma "mudança" — é a carga inicial
+  // do catálogo. Gerar um evento 'added' por imóvel aqui (ex: 704 de uma
+  // vez para o Podium) é ruído, não informação: não existe baseline
+  // anterior que justifique dizer que o imóvel "apareceu". Detectado pela
+  // contagem de properties existentes (não por histórico de scraper_runs)
+  // porque cobre corretamente o caso de uma primeira tentativa que falhou/
+  // veio degradada (0 properties persistidas) seguida da captura real —
+  // essa segunda tentativa É a primeira carga de verdade, mesmo já
+  // existindo um scraper_run anterior. properties.created_at continua
+  // registrando quando cada imóvel entrou no sistema, sem precisar de
+  // property_changes para isso. Decisão proposta e confirmada com o
+  // usuário antes de implementar.
+  const isFirstCapture = existingRows.length === 0;
+
   // Insere cada property_change individualmente (não em lote) — o retorno
   // de um INSERT em lote via PostgREST não garante preservar a ordem do
   // array enviado, e isso seria necessário pra casar cada linha inserida
@@ -92,7 +113,7 @@ export async function persistAndDetectChanges(
     new_price: number | null;
     old_status: string | null;
     new_status: string | null;
-  }, externalId: string): Promise<DetectedChange> {
+  }, externalId: string, referenceCode: string | null): Promise<DetectedChange> {
     const { data, error } = await supabase
       .from("property_changes")
       .insert({ ...change, scraper_run_id: options.scraperRunId })
@@ -102,6 +123,7 @@ export async function persistAndDetectChanges(
     return {
       propertyChangeId: data.id,
       externalId,
+      referenceCode,
       changeType: change.change_type,
       oldPrice: change.old_price,
       newPrice: change.new_price,
@@ -114,6 +136,7 @@ export async function persistAndDetectChanges(
   const toInsert: Array<{
     competitor_id: string;
     external_id: string;
+    reference_code: string | null;
     current_price: number | null;
     price_status: "valor" | "sob_consulta";
     url: string;
@@ -128,6 +151,7 @@ export async function persistAndDetectChanges(
       toInsert.push({
         competitor_id: competitorId,
         external_id: captured.external_id,
+        reference_code: captured.reference_code,
         current_price: captured.price,
         price_status: captured.price_status,
         url: captured.url,
@@ -145,6 +169,7 @@ export async function persistAndDetectChanges(
       .update({
         current_price: captured.price,
         price_status: captured.price_status,
+        reference_code: captured.reference_code,
         url: captured.url,
         last_seen_at: nowIso,
         status: "ativo",
@@ -163,7 +188,8 @@ export async function persistAndDetectChanges(
             old_status: null,
             new_status: null,
           },
-          existing.external_id
+          existing.external_id,
+          captured.reference_code
         )
       );
     }
@@ -178,7 +204,8 @@ export async function persistAndDetectChanges(
             old_status: "possivelmente_vendido",
             new_status: "ativo",
           },
-          existing.external_id
+          existing.external_id,
+          captured.reference_code
         )
       );
     }
@@ -191,8 +218,9 @@ export async function persistAndDetectChanges(
   // o que FOI capturado menos confiável) mas continua bloqueado por
   // configLooksDegraded (extração completou mas parece lixo — um seletor
   // quebrado pode gerar external_id inválido, que nunca bateria com nada
-  // existente e pareceria "novo" sem ser um imóvel de verdade). Distinção
-  // confirmada com o usuário antes de implementar.
+  // existente e pareceria "novo" sem ser um imóvel de verdade) e por
+  // isFirstCapture (carga inicial do catálogo não é uma mudança, ver
+  // comentário acima). Distinção confirmada com o usuário antes de implementar.
   if (toInsert.length > 0) {
     // upsert, não insert puro — rede de segurança ADICIONAL à paginação
     // acima (que já corrige a causa raiz), não um substituto dela: mesmo
@@ -205,7 +233,7 @@ export async function persistAndDetectChanges(
       .select("id, external_id, created_at");
     if (insertError) throw new Error(`Falha ao inserir novas properties: ${insertError.message}`);
 
-    if (!options.configLooksDegraded) {
+    if (!options.configLooksDegraded && !isFirstCapture) {
       const capturedByExternalId = new Map(capturedProperties.map((p) => [p.external_id, p]));
       for (const row of upsertedRows ?? []) {
         // upsert pode, em teoria, ter batido num conflito real (a linha já
@@ -228,7 +256,8 @@ export async function persistAndDetectChanges(
               old_status: null,
               new_status: null,
             },
-            row.external_id
+            row.external_id,
+            captured.reference_code
           )
         );
       }
@@ -260,7 +289,8 @@ export async function persistAndDetectChanges(
               old_status: "ativo",
               new_status: "possivelmente_vendido",
             },
-            existing.external_id
+            existing.external_id,
+            existing.reference_code
           )
         );
       }

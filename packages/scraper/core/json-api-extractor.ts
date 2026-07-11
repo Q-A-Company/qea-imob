@@ -137,8 +137,15 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
         ? getField(item, config.property_url_suffix_field)
         : null;
 
+      // config.reference_code_field pode ser null (sem código legível
+      // separado) ou apontar pro MESMO campo de external_id_field (quando
+      // ele já é legível, ex: Sentineli) — os dois casos são só uma leitura
+      // condicional a mais, sem lógica especial.
+      const referenceCodeValue = config.reference_code_field ? getField(item, config.reference_code_field) : null;
+
       properties.push({
         external_id: normalizeExternalId(String(externalIdValue)),
+        reference_code: referenceCodeValue != null ? normalizeExternalId(String(referenceCodeValue)) : null,
         price,
         price_status: price !== null ? "valor" : "sob_consulta",
         url: `${config.property_url_base}${urlValue}${suffixValue != null ? `/${suffixValue}` : ""}`,

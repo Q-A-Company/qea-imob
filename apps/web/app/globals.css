@@ -18,7 +18,8 @@
   --color-erro: #883a38; /* avisos e erros */
   --color-sucesso: #507707;
 
-  --color-noite: #1a1a19; /* fundo geral modo escuro */
+  --color-noite: #09090b; /* fundo geral modo escuro */
+  --color-carvao: #18181b; /* fundo de superfícies elevadas modo escuro — cards, gráficos, sidebar/nav; qualquer elemento com fundo próprio, distinto do fundo geral (--color-noite) */
   --color-alvorada: #fafaf8; /* fundo geral modo claro */
   --color-tinta: #1f1d1b; /* texto primário modo claro */
   --color-neve: #f5f4f2; /* texto primário modo escuro */
@@ -38,29 +39,33 @@
   --erro-text: var(--color-erro); /* ~7,4:1 sobre --color-alvorada */
   --sucesso: var(--color-sucesso);
   --sucesso-text: var(--color-sucesso); /* ~5,1:1 sobre --color-alvorada */
-  /* Fundo só da sidebar/nav lateral — precisa mudar por modo (relatado:
-     ficava preto mesmo no modo claro). Branco no claro (mesmo tom do
-     --surface dos cards, distinguido pela borda) — no escuro é mais
-     escuro que o fundo geral (--color-noite), então aqui espelha isso
-     ficando mais claro que o fundo geral em vez de repetir o mesmo tom. */
+  /* Fundo só da sidebar/nav lateral — mesmo tom de --surface (superfície
+     elevada) nos dois modos agora: branco no claro, --color-carvao no
+     escuro (ver .dark abaixo), distinguido do fundo geral pela borda. */
   --nav: #ffffff;
 }
 
 .dark {
   --background: var(--color-noite);
   --foreground: var(--color-neve);
-  --surface: #212024;
+  --surface: var(--color-carvao);
   --surface-border: color-mix(in srgb, var(--color-grafite) 35%, transparent);
   --muted: var(--color-grafite);
-  /* Variantes clareadas (mesmo H/S da cor base, só mais claras) — a cor
-     cheia sozinha não bate 4,5:1 contra --color-noite (calculado: sinal
-     3,12:1, erro 2,25:1, sucesso 3,30:1, todos abaixo de AA). fundo/borda
-     (--signal/--erro/--sucesso) continuam com o valor cheio — só usados a
-     baixa opacidade, não precisam da variante clara. */
-  --signal-text: #7f7ac7; /* ~4,57:1 sobre --color-noite */
-  --erro-text: #c16a67; /* ~4,58:1 sobre --color-noite */
-  --sucesso-text: #71a90a; /* ~6,12:1 sobre --color-noite */
-  --nav: #0d0d0d;
+  /* Variantes clareadas (mesmo H/S da cor base, só mais claras) — calculado
+     contra o --color-noite anterior (#1a1a19); o atual (#09090b) é mais
+     escuro ainda, então o contraste real só melhorou (valores abaixo
+     continuam válidos como piso, não ficaram desatualizados pra pior).
+     fundo/borda (--signal/--erro/--sucesso) continuam com o valor cheio —
+     só usados a baixa opacidade, não precisam da variante clara. */
+  --signal-text: #7f7ac7; /* ~4,57:1 sobre --color-noite (piso — real é maior) */
+  --erro-text: #c16a67; /* ~4,58:1 sobre --color-noite (piso — real é maior) */
+  --sucesso-text: #71a90a; /* ~6,12:1 sobre --color-noite (piso — real é maior) */
+  /* Nav agora usa a mesma superfície elevada dos cards (--color-carvao),
+     igual ao modo claro (nav = --surface, ver comentário em :root) — antes
+     era MAIS escura que o fundo geral (#0d0d0d vs #1a1a19); com o fundo
+     geral ficando ainda mais escuro (#09090b), manter essa relação teria
+     deixado a nav quase indistinguível do resto. */
+  --nav: var(--color-carvao);
 }
 
 @theme inline {
@@ -98,6 +103,34 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Scrollbar estilizada globalmente — regra em `*` (não escopada a um
+   container específico) porque o pseudo-elemento ::-webkit-scrollbar só
+   renderiza mesmo em elementos que de fato têm overflow scrollável; aplicar
+   a todos cobre body, feed do Painel, dropdown de notificações, tabelas de
+   Relatórios (overflow-x-auto) e qualquer overflow-y:auto futuro, sem
+   precisar repetir em cada componente. --color-grafite é a mesma cor nos
+   dois temas (não redefinida em .dark, ver :root) — não precisa de variante
+   por tema. Track transparente (não a cor do container, que mudaria por
+   componente) — mais simples e funciona em qualquer superfície. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-grafite) 45%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-grafite) 45%, transparent);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-grafite) 70%, transparent);
 }
 
 /* <dialog> aberto via showModal() (delete-user-button.tsx, delete-competitor-button.tsx,

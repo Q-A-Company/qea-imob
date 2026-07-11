@@ -4,4 +4,11 @@
 // como uma referência RPC, não o array de verdade — foi exatamente esse o
 // bug: "ALLOWED_POLLING_INTERVALS.map is not a function"). Dados
 // compartilhados entre client e server ficam num módulo plano como este.
-export const ALLOWED_POLLING_INTERVALS = [5, 10, 30, 60] as const;
+//
+// Reexporta de scraper/core/polling-interval — fonte única dos degraus
+// disponíveis, também usada por check-competitor.ts pra decidir o
+// intervalo mínimo seguro por concorrente (duração medida × 2, arredondado
+// pra cima até o menor degrau aqui). Nome mantido (não virou
+// AVAILABLE_INTERVALS_MINUTES) pra não precisar renomear em cada lugar do
+// apps/web que já importa este símbolo.
+export { AVAILABLE_INTERVALS_MINUTES as ALLOWED_POLLING_INTERVALS } from "scraper/core/polling-interval";

@@ -217,6 +217,13 @@ export function UserSecurityTab({
         </section>
       )}
 
+
+      <section className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
+        <h2 className="text-sm font-semibold text-foreground">Redefinir senha</h2>
+        <SetPasswordControls userId={user.id} onSetPassword={actions.setPassword} />
+        <ResetPasswordControls user={user} onReset={actions.resetPassword} />
+      </section>
+
       <section className="flex flex-col gap-2 rounded-lg border border-surface-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-foreground">Acesso</h2>
         {!user.banned && (
@@ -251,12 +258,6 @@ export function UserSecurityTab({
             {banError}
           </p>
         )}
-      </section>
-
-      <section className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-foreground">Redefinir senha</h2>
-        <SetPasswordControls userId={user.id} onSetPassword={actions.setPassword} />
-        <ResetPasswordControls user={user} onReset={actions.resetPassword} />
       </section>
 
       <section className="flex flex-col gap-2 rounded-lg border border-erro/30 bg-erro/5 p-4">

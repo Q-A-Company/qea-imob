@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { logAuditEvent } from "@/lib/audit/log";
 
 export interface UpdateNotificationChannelState {
@@ -80,4 +81,111 @@ export async function updatePersonalEmailPreferenceAction(enabled: boolean): Pro
   revalidatePath("/admin/settings");
   revalidatePath("/user/settings");
   return { success: true };
+}
+
+export interface ClearAccountHistoryState {
+  error?: string;
+  success?: boolean;
+  deletedCount?: number;
+}
+
+const FETCH_PAGE_SIZE = 1000;
+// 500 causou "TypeError: fetch failed" contra dados reais desta mesma
+// sessão (get-run-changes.ts, lib/competitors/actions.ts) — não é um 400 do
+// PostgREST, é falha de rede mais cedo, provável limite de tamanho de URL/
+// header. Testado empiricamente: 350 funciona, 400 falha. 200 com margem.
+const ID_CHUNK_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+// Zona de perigo — apaga TODO o histórico de mudanças (property_changes,
+// todos os change_types) de TODOS os concorrentes da conta, permanentemente.
+// Escopo decidido explicitamente com o usuário antes de implementar:
+//   - properties, site_configs, competitors: intactos (imóveis continuam
+//     existindo com o estado atual; nenhum reaprendizado via IA é
+//     disparado — essa ação nunca toca em site_configs).
+//   - scraper_runs: intacto (log técnico de execução, não histórico de
+//     mudança — Feed/Relatórios são alimentados por property_changes).
+//   - notifications vinculadas às property_changes apagadas: também
+//     apagadas (não só desvinculadas via ON DELETE SET NULL) — decisão de
+//     coerência: o sino não deveria continuar mostrando mudanças que o
+//     Feed/Relatórios não confirmam mais depois da limpeza.
+//   - email_digest_log: intacto (log de ENVIO/deduplicação por dia, não
+//     histórico de mudança — apagar arriscaria reenvio duplicado do
+//     resumo diário pelo worker).
+// Restrito a admin (Diretor/T.I) — não gerente — dado o tamanho do
+// impacto: conta inteira, todos os concorrentes, irreversível.
+export async function clearAccountHistoryAction(): Promise<ClearAccountHistoryState> {
+  const profile = await requireRole("admin");
+  const accountId = profile.account_id!;
+  // Service role, não o cliente RLS-scoped — property_changes/notifications
+  // só têm política de RLS para SELECT (e UPDATE, no caso de notifications)
+  // para membros da conta; nunca existiu política de DELETE pra eles, só
+  // pro SuperAdmin (FOR ALL). Sem isso, o .delete() abaixo roda sem erro
+  // mas afeta 0 linhas de verdade (RLS filtra silenciosamente) — bug real
+  // reproduzido: a SELECT contava certo, o DELETE não apagava nada. A
+  // autorização de verdade já é o requireRole("admin") acima, não a RLS.
+  const supabase = createServiceClient();
+
+  const { data: competitors, error: competitorsError } = await supabase.from("competitors").select("id").eq("account_id", accountId);
+  if (competitorsError) return { error: `Falha ao buscar concorrentes: ${competitorsError.message}` };
+  const competitorIds = (competitors ?? []).map((c) => c.id);
+
+  const propertyIds: string[] = [];
+  for (const competitorIdsChunk of chunk(competitorIds, ID_CHUNK_SIZE)) {
+    for (let offset = 0; ; offset += FETCH_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id")
+        .in("competitor_id", competitorIdsChunk)
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) return { error: `Falha ao buscar imóveis: ${error.message}` };
+      propertyIds.push(...(data ?? []).map((p) => p.id));
+      if (!data || data.length < FETCH_PAGE_SIZE) break;
+    }
+  }
+
+  let deletedCount = 0;
+  for (const propertyIdsChunk of chunk(propertyIds, ID_CHUNK_SIZE)) {
+    const changeIds: string[] = [];
+    for (let offset = 0; ; offset += FETCH_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("property_changes")
+        .select("id")
+        .in("property_id", propertyIdsChunk)
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) return { error: `Falha ao buscar histórico de mudanças: ${error.message}` };
+      changeIds.push(...(data ?? []).map((c) => c.id));
+      if (!data || data.length < FETCH_PAGE_SIZE) break;
+    }
+    deletedCount += changeIds.length;
+
+    for (const changeIdsChunk of chunk(changeIds, ID_CHUNK_SIZE)) {
+      const { error } = await supabase.from("notifications").delete().in("property_change_id", changeIdsChunk);
+      if (error) return { error: `Falha ao apagar notificações relacionadas: ${error.message}` };
+    }
+
+    const { error: deleteChangesError } = await supabase.from("property_changes").delete().in("property_id", propertyIdsChunk);
+    if (deleteChangesError) return { error: `Falha ao apagar histórico de mudanças: ${deleteChangesError.message}` };
+  }
+
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId,
+    actionType: "history_cleared",
+    details: { deletedCount, competitorsAffected: competitorIds.length },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/user");
+  revalidatePath("/admin/relatorios");
+  revalidatePath("/user/relatorios");
+  revalidatePath("/admin/history");
+  revalidatePath("/user/history");
+
+  return { success: true, deletedCount };
 }

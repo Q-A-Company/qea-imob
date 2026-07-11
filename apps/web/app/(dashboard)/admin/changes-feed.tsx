@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { formatBRL, formatRelativeTime } from "@/lib/format";
 import { InfoTooltip } from "../info-tooltip";
+import { PropertyReferenceLink } from "../property-reference-link";
 import type { FeedItem } from "./get-dashboard-data";
 
 const listVariants = {
@@ -20,7 +21,9 @@ function FeedRow({ item }: { item: FeedItem }) {
     <motion.li variants={itemVariants} className="flex items-center justify-between gap-4 border-b border-surface-border px-4 py-3 last:border-b-0">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{item.competitorName}</p>
-        <p className="truncate text-xs text-muted">Imóvel {item.externalId}</p>
+        <p className="truncate text-xs text-muted">
+          Imóvel <PropertyReferenceLink referenceCode={item.referenceCode} url={item.url} />
+        </p>
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -58,7 +61,7 @@ export function ChangesFeed({ feed }: { feed: FeedItem[] }) {
       {feed.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted">Nenhuma mudança detectada nos últimos 7 dias.</p>
       ) : (
-        <motion.ul variants={listVariants} className="overflow-y-auto">
+        <motion.ul variants={listVariants} className="overflow-y-auto overflow-x-hidden">
           {feed.map((item) => (
             <FeedRow key={item.id} item={item} />
           ))}

@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { getNotificationSettings } from "./get-notification-settings";
 import { NotificationChannelToggle } from "./notification-channel-toggle";
 import { PersonalEmailPreferenceToggle } from "./personal-email-preference-toggle";
+import { AppearanceThemeToggle } from "./appearance-theme-toggle";
+import { ClearHistoryButton } from "./clear-history-button";
 
 export default async function SettingsPage() {
   const profile = await requireRole(["admin", "gerente"]);
@@ -17,7 +19,7 @@ export default async function SettingsPage() {
       <section className="flex flex-col gap-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Canais de notificação da conta</h2>
-          <p className="mt-1 text-xs text-muted">Vale pra todo mundo da conta — Admin, Gerente e Corretor.</p>
+          <p className="mt-1 text-xs text-muted">Vale pra todo mundo da conta — Diretor / T.I, Gerente e Corretor.</p>
         </div>
         <NotificationChannelToggle
           channel="site"
@@ -40,6 +42,29 @@ export default async function SettingsPage() {
         </div>
         <PersonalEmailPreferenceToggle initialEnabled={profile.email_notifications_enabled} />
       </section>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Aparência</h2>
+          <p className="mt-1 text-xs text-muted">Preferência pessoal, vale só neste dispositivo.</p>
+        </div>
+        <AppearanceThemeToggle />
+      </section>
+
+      {/* Só Diretor/T.I (não Gerente) — decidido explicitamente com o
+          usuário, dado o tamanho do impacto (conta inteira, irreversível).
+          A action em si também restringe via requireRole("admin"); esse
+          `if` aqui é só pra não mostrar o botão pra quem não pode usá-lo. */}
+      {profile.role === "admin" && (
+        <section className="flex flex-col gap-2 rounded-lg border border-erro/30 bg-erro/5 p-4">
+          <h2 className="text-sm font-semibold text-foreground">Zona de perigo</h2>
+          <p className="text-xs text-muted">
+            Apaga permanentemente o histórico de mudanças (Feed e Relatórios) de todos os concorrentes desta conta. Imóveis
+            capturados e configuração de extração não são afetados.
+          </p>
+          <ClearHistoryButton />
+        </section>
+      )}
     </div>
   );
 }

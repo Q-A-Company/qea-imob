@@ -123,8 +123,23 @@ export function formatAuditEvent({ actionType, details }: AuditEventInput): stri
       return name ? `Status do concorrente "${name}" alterado para ${status}` : `Status do concorrente alterado para ${status}`;
     }
     case "competitor_interval_changed": {
-      const minutes = typeof d.minutes === "number" ? d.minutes : null;
       const name = typeof d.name === "string" ? d.name : null;
+      // automatic: true vem só de maybeAdjustPollingInterval
+      // (packages/scraper/jobs/check-competitor.ts) — nunca de uma troca
+      // manual pelo Admin (updateCompetitorIntervalAction), que usa o
+      // formato mais simples abaixo (só `minutes`).
+      if (d.automatic === true) {
+        const oldMinutes = typeof d.oldMinutes === "number" ? d.oldMinutes : null;
+        const newMinutes = typeof d.newMinutes === "number" ? d.newMinutes : null;
+        const avgMinutes = typeof d.avgDurationMs === "number" ? (d.avgDurationMs / 60_000).toFixed(1) : null;
+        const base = name
+          ? `Intervalo de checagem de "${name}" ajustado automaticamente`
+          : "Intervalo de checagem ajustado automaticamente";
+        const change = oldMinutes !== null && newMinutes !== null ? ` de ${oldMinutes} para ${newMinutes} min` : "";
+        const reason = avgMinutes !== null ? ` (checagem levando em média ${avgMinutes} min)` : "";
+        return `${base}${change}${reason}`;
+      }
+      const minutes = typeof d.minutes === "number" ? d.minutes : null;
       if (!minutes) return "Intervalo de checagem alterado";
       return name
         ? `Intervalo de checagem do concorrente "${name}" alterado para ${minutes} min`
@@ -146,6 +161,32 @@ export function formatAuditEvent({ actionType, details }: AuditEventInput): stri
     case "account_name_changed": {
       const newName = typeof d.newName === "string" ? d.newName : null;
       return newName ? `Nome da conta alterado para "${newName}"` : "Nome da conta alterado";
+    }
+
+    case "site_config_confirmed_by_superadmin": {
+      const name = typeof d.competitorName === "string" ? d.competitorName : null;
+      return name
+        ? `Configuração de site de "${name}" aprovada pelo SuperAdmin`
+        : "Configuração de site aprovada pelo SuperAdmin";
+    }
+    case "site_config_discarded_by_superadmin": {
+      const name = typeof d.competitorName === "string" ? d.competitorName : null;
+      // competitorDeleted distingue os dois caminhos possíveis (ver
+      // discardSiteConfigActionForSuperAdmin, lib/competitors/actions.ts):
+      // version=1 apaga o concorrente inteiro; version>1 (recalibração)
+      // rejeita só a versão pendente, concorrente continua existindo.
+      const competitorDeleted = d.competitorDeleted === true;
+      if (!name) return "Configuração de site descartada pelo SuperAdmin";
+      return competitorDeleted
+        ? `Configuração de site de "${name}" descartada pelo SuperAdmin (concorrente removido)`
+        : `Recalibração pendente de "${name}" rejeitada pelo SuperAdmin (concorrente e histórico mantidos)`;
+    }
+
+    case "history_cleared": {
+      const count = typeof d.deletedCount === "number" ? d.deletedCount : null;
+      return count !== null
+        ? `Histórico de mudanças da conta foi limpo (${count} ${count === 1 ? "registro apagado" : "registros apagados"})`
+        : "Histórico de mudanças da conta foi limpo";
     }
 
     default:

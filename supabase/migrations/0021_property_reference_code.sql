@@ -1,0 +1,11 @@
+-- Separa o propósito técnico do propósito de exibição, hoje conflados em
+-- external_id: external_id continua sendo a chave ESTÁVEL de comparação
+-- entre checagens (prioriza atributos estruturados tipo data-postid, mesmo
+-- que ilegíveis, ver config-generator.ts) — nunca deveria ter sido mostrado
+-- pro usuário final, é detalhe interno. reference_code é o código/
+-- referência VISÍVEL que a imobiliária reconhece (ex: "mu9536", "CI0298") —
+-- nullable porque nem todo site expõe um código legível (confirmado com
+-- dados reais: no mesmo concorrente, alguns imóveis têm código na URL e
+-- outros não). Sem índice — só exibição, nunca usado pra unicidade/busca
+-- (isso continua sendo external_id, com a constraint unique já existente).
+alter table public.properties add column reference_code text;

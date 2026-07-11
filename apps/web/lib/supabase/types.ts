@@ -96,6 +96,11 @@ export interface Database {
           polling_interval_minutes: number;
           status: CompetitorStatus;
           last_checked_at: string | null;
+          // Lock contra checagens sobrepostas do mesmo concorrente (ver
+          // migration 0023, acquireCheckLock/releaseCheckLock em
+          // check-competitor.ts) — timestamp de quando a checagem em
+          // andamento começou, null quando não há nenhuma rodando.
+          check_started_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -107,6 +112,7 @@ export interface Database {
           polling_interval_minutes?: number;
           status?: CompetitorStatus;
           last_checked_at?: string | null;
+          check_started_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["competitors"]["Insert"]>;
@@ -139,6 +145,11 @@ export interface Database {
           id: string;
           competitor_id: string;
           external_id: string;
+          // Código/referência VISÍVEL (o que a imobiliária reconhece) —
+          // distinto de external_id, que é só chave técnica interna e nunca
+          // deveria aparecer pro usuário final. null quando o site não
+          // expõe nenhum código legível pra este imóvel.
+          reference_code: string | null;
           current_price: number | null;
           price_status: PriceStatus;
           url: string;
@@ -150,6 +161,7 @@ export interface Database {
           id?: string;
           competitor_id: string;
           external_id: string;
+          reference_code?: string | null;
           current_price?: number | null;
           price_status: PriceStatus;
           url: string;
@@ -204,6 +216,7 @@ export interface Database {
           id: string;
           account_id: string;
           property_change_id: string | null;
+          competitor_id: string | null;
           title: string;
           message: string;
           read: boolean;
@@ -213,6 +226,7 @@ export interface Database {
           id?: string;
           account_id: string;
           property_change_id?: string | null;
+          competitor_id?: string | null;
           title: string;
           message: string;
           read?: boolean;

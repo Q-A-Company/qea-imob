@@ -79,7 +79,7 @@ export function CompetitorPieChart({
             style={{ background: buildConicGradient(entries) }}
             aria-hidden
           />
-          <ul className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+          <ul className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
             {entries.map((e) => (
               <li key={e.competitorId} className="flex items-center gap-2 text-sm" title={e.name}>
                 <span

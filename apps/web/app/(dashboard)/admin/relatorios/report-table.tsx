@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { colorForCompetitor } from "@/lib/categorical-colors";
 import { formatBRL } from "@/lib/format";
+import { PropertyReferenceLink } from "../../property-reference-link";
 import { PAGE_SIZE, type ReportRow } from "./get-report-data";
 
 function formatDateTime(value: string) {
@@ -73,7 +74,9 @@ export function ReportTable({
                       <span className="text-xs text-muted print:!text-black">{row.competitorName}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">{row.externalId}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">
+                    <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
+                  </td>
                   <td className="px-3 py-2 text-xs print:!text-black">
                     {row.changeType === "price" ? (
                       <span className="text-foreground print:!text-black">Preço</span>

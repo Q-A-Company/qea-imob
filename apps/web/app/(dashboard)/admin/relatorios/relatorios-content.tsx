@@ -47,7 +47,11 @@ export async function RelatoriosContent({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between print:hidden">
+      {/* pr-16 reserva o espaço do sino de notificações flutuante
+          (fixed right-4 top-4 em dashboard-chrome.tsx, ~40px de largura) —
+          sem isso, o PrintButton (alinhado à direita via justify-between)
+          fica embaixo do sino quando a página carrega no topo. */}
+      <div className="flex items-center justify-between pr-16 print:hidden">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Relatórios</h1>
           <p className="mt-1 text-sm text-muted">Histórico completo de mudanças de preço e disponibilidade, com filtros.</p>

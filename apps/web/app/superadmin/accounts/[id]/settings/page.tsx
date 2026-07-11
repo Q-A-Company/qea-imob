@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { getAccountSettingsData } from "../get-account-settings-data";
+import { getPendingSiteConfigs } from "../get-pending-site-configs";
 import { AccountStatusToggle } from "../account-status-toggle";
 import { AccountNameEditor } from "../account-name-editor";
 import { AccountNotesEditor } from "../account-notes-editor";
+import { PendingSiteConfigReview } from "../pending-site-config-review";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
@@ -22,6 +24,7 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
   const { id } = await params;
   const data = await getAccountSettingsData(id);
   if (!data) notFound();
+  const pendingConfigs = data.pendingReviewCount > 0 ? await getPendingSiteConfigs(id) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -37,12 +40,13 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
         <p>Criado em: {formatDateTime(data.createdAt)}</p>
         <p>Concorrentes: {data.competitorsCount}</p>
         <p>Usuários: {data.usersCount}</p>
-        {data.pendingReviewCount > 0 && (
-          <p className="font-medium text-erro-texto">
-            {data.pendingReviewCount} config. de site aguardando revisão
-          </p>
-        )}
       </div>
+
+      {/* Substitui o antigo indicador passivo (só a contagem) — agora lista
+          cada site_config pendente com o contexto que o Admin já vê em
+          register-form.tsx (estratégia/confiança/warnings) e ação real de
+          aprovar/descartar, ver pending-site-config-review.tsx. */}
+      <PendingSiteConfigReview accountId={data.id} configs={pendingConfigs} />
 
       <AccountNameEditor accountId={data.id} initialName={data.name} />
 

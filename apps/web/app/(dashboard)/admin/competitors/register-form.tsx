@@ -7,7 +7,6 @@ import {
   discardSiteConfigAction,
   type RegisterCompetitorState,
 } from "@/lib/competitors/actions";
-import { ALLOWED_POLLING_INTERVALS } from "@/lib/competitors/constants";
 
 const initialState: RegisterCompetitorState = {};
 
@@ -150,19 +149,6 @@ export function RegisterCompetitorForm() {
           <input id="listingUrl" name="listingUrl" type="url" required className={inputClass} placeholder="https://exemplo.com.br/imoveis" />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="pollingIntervalMinutes" className="text-xs font-medium text-muted">
-            Intervalo
-          </label>
-          <select id="pollingIntervalMinutes" name="pollingIntervalMinutes" defaultValue={5} required className={inputClass}>
-            {ALLOWED_POLLING_INTERVALS.map((m) => (
-              <option key={m} value={m}>
-                {m} min
-              </option>
-            ))}
-          </select>
-        </div>
-
         <button
           type="submit"
           disabled={pending}
@@ -197,7 +183,7 @@ export function RegisterCompetitorForm() {
       )}
       {justResolved && lastAction === "discarded" && (
         <p className="text-sm text-muted" role="status">
-          Cadastro descartado. Pode tentar de novo, com outra URL ou ajustando o intervalo.
+          Cadastro descartado. Pode tentar de novo, com outra URL.
         </p>
       )}
     </form>

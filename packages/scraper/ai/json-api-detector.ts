@@ -251,7 +251,7 @@ async function mapJsonFields(params: {
   const response = await client.messages.parse({
     model: MODEL,
     max_tokens: 4000,
-    system: `Você recebe uma amostra de itens de um endpoint JSON de busca de imóveis e deve mapear os campos para: referência/código externo, preço, indicador de preço indisponível (se existir), e como montar a URL da página individual do imóvel a partir dos campos do item.${
+    system: `Você recebe uma amostra de itens de um endpoint JSON de busca de imóveis e deve mapear os campos para: identificador técnico estável (external_id_field — uso interno, pode ser ilegível, ex: um ID numérico), código/referência VISÍVEL que a imobiliária reconhece (reference_code_field — pode ser o mesmo campo de external_id_field quando ele já for legível, ex: um campo "codigo"/"referencia" textual; null se não existir um código legível separado), preço, indicador de preço indisponível (se existir), e como montar a URL da página individual do imóvel a partir dos campos do item.${
       params.totalListingsHint
         ? ` O site menciona ter aproximadamente ${params.totalListingsHint} imóveis no total — se algum campo do item ou de nível superior bater com esse número, é provavelmente o campo de total.`
         : ""

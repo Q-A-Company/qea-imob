@@ -3,12 +3,21 @@ import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { runPriceCheck } from "./run-price-check.js";
 import { persistAndDetectChanges, type DetectedChange } from "./persist-and-compare.js";
 import { createNotification } from "../core/notify.js";
+import { minimumSafeIntervalMinutes } from "../core/polling-interval.js";
 import type { ExtractedProperty } from "../core/types.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function formatBRL(value: number | null): string {
   if (value === null) return "sob consulta";
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// Notificação é texto puro (não HTML/link, diferente das 3 telas que
+// mostram reference_code como link clicável) — "Um imóvel" no lugar de
+// "O imóvel " quando não há código visível, pra continuar lendo natural
+// nas 4 mensagens abaixo ("Um imóvel apareceu...", não "O imóvel  apareceu...").
+function describeProperty(referenceCode: string | null): string {
+  return referenceCode ? `O imóvel ${referenceCode}` : "Um imóvel";
 }
 
 // Etapa 8: uma notificação (sino) por property_change — property_change_id
@@ -19,6 +28,7 @@ function formatBRL(value: number | null): string {
 async function notifyPropertyChanges(
   supabase: SupabaseClient,
   accountId: string,
+  competitorId: string,
   competitorName: string,
   changes: DetectedChange[]
 ): Promise<void> {
@@ -26,30 +36,34 @@ async function notifyPropertyChanges(
     if (change.changeType === "added") {
       await createNotification(supabase, {
         accountId,
+        competitorId,
         propertyChangeId: change.propertyChangeId,
         title: `Novo imóvel: ${competitorName}`,
-        message: `O imóvel ${change.externalId} apareceu na listagem de "${competitorName}" por ${formatBRL(change.newPrice)}.`,
+        message: `${describeProperty(change.referenceCode)} apareceu na listagem de "${competitorName}" por ${formatBRL(change.newPrice)}.`,
       });
     } else if (change.changeType === "removed") {
       await createNotification(supabase, {
         accountId,
+        competitorId,
         propertyChangeId: change.propertyChangeId,
         title: `Imóvel possivelmente vendido: ${competitorName}`,
-        message: `O imóvel ${change.externalId} não aparece mais na listagem de "${competitorName}" — pode ter sido vendido ou removido.`,
+        message: `${describeProperty(change.referenceCode)} não aparece mais na listagem de "${competitorName}" — pode ter sido vendido ou removido.`,
       });
     } else if (change.changeType === "reappeared") {
       await createNotification(supabase, {
         accountId,
+        competitorId,
         propertyChangeId: change.propertyChangeId,
         title: `Imóvel voltou a aparecer: ${competitorName}`,
-        message: `O imóvel ${change.externalId} reapareceu na listagem de "${competitorName}".`,
+        message: `${describeProperty(change.referenceCode)} reapareceu na listagem de "${competitorName}".`,
       });
     } else {
       await createNotification(supabase, {
         accountId,
+        competitorId,
         propertyChangeId: change.propertyChangeId,
         title: `Mudança de preço: ${competitorName}`,
-        message: `O imóvel ${change.externalId} de "${competitorName}" mudou de ${formatBRL(change.oldPrice)} para ${formatBRL(change.newPrice)}.`,
+        message: `${describeProperty(change.referenceCode)} de "${competitorName}" mudou de ${formatBRL(change.oldPrice)} para ${formatBRL(change.newPrice)}.`,
       });
     }
   }
@@ -86,9 +100,65 @@ export interface CheckCompetitorResult {
   configMarkedDegraded: boolean;
   errorMessage: string | null;
   properties: ExtractedProperty[];
+  // true quando esta chamada nem chegou a rodar — outra checagem do MESMO
+  // concorrente já estava em andamento (lock ocupado). Não gera
+  // scraper_runs (nada rodou de verdade), só avisa quem chamou.
+  skippedAlreadyRunning: boolean;
+}
+
+// Checagem de um MESMO concorrente nunca pode rodar em paralelo consigo
+// mesma — o scheduler (apps/worker) já não sobrepõe consigo mesmo (loop
+// via setTimeout recursivo, só começa o próximo ciclo depois que o
+// anterior termina de verdade), mas "Verificar agora" (Server Action,
+// checkCompetitorNowAction) chama checkCompetitor() direto, fora desse
+// loop — um clique no exato momento em que o scheduler já está checando
+// o mesmo concorrente rodaria as duas chamadas concorrentemente, sem essa
+// trava. Investigado e confirmado com o usuário antes de implementar.
+//
+// STALE_LOCK_MINUTES: se o processo morrer NO MEIO de uma checagem (não
+// um erro tratado, um crash de verdade), check_started_at ficaria preso
+// pra sempre sem isso — 30min dá folga confortável até pro maior
+// concorrente hoje (Sentineli, ~4min) sem arriscar destravar um lock que
+// ainda está genuinamente em uso.
+const STALE_LOCK_MINUTES = 30;
+
+// UPDATE condicional atômico — não é "buscar o valor, decidir, escrever"
+// (teria uma corrida entre os dois passos); é um único UPDATE ... WHERE
+// que só afeta a linha se ela ainda estiver livre (ou o lock anterior
+// estiver velho demais pra ser confiável), e o retorno (afetou linha ou
+// não) já É a resposta de quem ganhou o lock — sem select() coordenado
+// com update() em dois passos.
+async function acquireCheckLock(supabase: SupabaseClient, competitorId: string): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+  const staleThresholdIso = new Date(Date.now() - STALE_LOCK_MINUTES * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from("competitors")
+    .update({ check_started_at: nowIso })
+    .eq("id", competitorId)
+    .or(`check_started_at.is.null,check_started_at.lt.${staleThresholdIso}`)
+    .select("id");
+  if (error) throw new Error(`Falha ao adquirir lock de checagem: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+async function releaseCheckLock(supabase: SupabaseClient, competitorId: string): Promise<void> {
+  await supabase.from("competitors").update({ check_started_at: null }).eq("id", competitorId);
 }
 
 const EMPTY_CHANGES_BY_TYPE: ChangesByType = { price: 0, added: 0, removed: 0, reappeared: 0 };
+
+const SKIPPED_RESULT_BASE = {
+  success: false,
+  propertiesCaptured: 0,
+  changesDetected: 0,
+  changesByType: EMPTY_CHANGES_BY_TYPE,
+  stoppedEarlyDueToError: false,
+  pausedByCircuitBreaker: false,
+  reactivatedAfterSuccess: false,
+  configMarkedDegraded: false,
+  properties: [] as ExtractedProperty[],
+  skippedAlreadyRunning: true,
+} as const;
 
 function countChangesByType(changes: DetectedChange[]): ChangesByType {
   const counts = { ...EMPTY_CHANGES_BY_TYPE };
@@ -137,6 +207,91 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
   return count;
 }
 
+// Média das últimas execuções — não só a mais recente — pra não deixar um
+// outlier pontual (rede lenta num dia específico) empurrar o intervalo pra
+// cima permanentemente: a regra só AUMENTA sozinha, nunca diminui, então
+// um outlier ficaria "grudado" se fosse a única amostra. Com 1 execução
+// disponível (primeira checagem real do concorrente), a média já é essa 1
+// execução — não precisa de caso especial pra "é a primeira vez".
+const INTERVAL_RECHECK_SAMPLE_SIZE = 3;
+
+// Reavalia polling_interval_minutes contra a duração medida, subindo pro
+// próximo degrau seguro se precisar (nunca desce sozinho — ver
+// minimumSafeIntervalMinutes, packages/scraper/core/polling-interval.ts).
+// Chamada depois de TODA checagem bem-sucedida e limpa (ver call site em
+// checkCompetitor) — é a MESMA lógica pra "primeira checagem" e pra
+// "concorrente cresceu com o tempo", não dois mecanismos separados.
+// Melhor esforço: qualquer erro aqui é logado, nunca derruba a checagem
+// que já rodou com sucesso.
+async function maybeAdjustPollingInterval(
+  supabase: SupabaseClient,
+  competitor: { id: string; account_id: string; name: string; polling_interval_minutes: number }
+): Promise<void> {
+  const { data: recentRuns, error: recentRunsError } = await supabase
+    .from("scraper_runs")
+    .select("duration_ms")
+    .eq("competitor_id", competitor.id)
+    .eq("run_type", "checagem")
+    .eq("success", true)
+    .eq("stopped_early_due_to_error", false)
+    .not("duration_ms", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(INTERVAL_RECHECK_SAMPLE_SIZE);
+  if (recentRunsError) {
+    console.error(`Falha ao buscar execuções recentes pra reavaliar intervalo (${competitor.id}): ${recentRunsError.message}`);
+    return;
+  }
+
+  const durations = (recentRuns ?? []).map((r) => r.duration_ms as number);
+  if (durations.length === 0) return;
+  const avgDurationMs = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+
+  const recommended = minimumSafeIntervalMinutes(avgDurationMs);
+  if (recommended.minutes <= competitor.polling_interval_minutes) return;
+
+  const oldMinutes = competitor.polling_interval_minutes;
+  const { error: updateError } = await supabase
+    .from("competitors")
+    .update({ polling_interval_minutes: recommended.minutes })
+    .eq("id", competitor.id);
+  if (updateError) {
+    console.error(`Falha ao ajustar polling_interval_minutes automaticamente (${competitor.id}): ${updateError.message}`);
+    return;
+  }
+
+  const avgMinutesLabel = (avgDurationMs / 60_000).toFixed(1);
+  const marginNote = recommended.marginGuaranteed
+    ? ""
+    : " Mesmo no maior intervalo disponível, a margem de segurança de 2x não está garantida — vale investigar por que este concorrente está tão lento.";
+
+  // audit_log inserido direto (não via lib/audit/log.ts) — packages/scraper
+  // não importa de apps/web (sentido contrário ao resto do projeto), então
+  // não reaproveita aquele helper; mesmo formato de linha, mesmo
+  // best-effort (nunca lança, só loga).
+  const { error: auditError } = await supabase.from("audit_log").insert({
+    actor_user_id: null,
+    account_id: competitor.account_id,
+    action_type: "competitor_interval_changed",
+    target_type: "competitor",
+    target_id: competitor.id,
+    details: {
+      automatic: true,
+      oldMinutes,
+      newMinutes: recommended.minutes,
+      avgDurationMs: Math.round(avgDurationMs),
+      name: competitor.name,
+    },
+  });
+  if (auditError) console.error(`Falha ao gravar audit_log (competitor_interval_changed automático): ${auditError.message}`);
+
+  await createNotification(supabase, {
+    accountId: competitor.account_id,
+    competitorId: competitor.id,
+    title: `Intervalo de checagem ajustado automaticamente: ${competitor.name}`,
+    message: `As últimas checagens de "${competitor.name}" levaram em média ${avgMinutesLabel} min — o intervalo subiu de ${oldMinutes} para ${recommended.minutes} min pra manter uma margem de segurança.${marginNote}`,
+  });
+}
+
 // Etapa 5: roda uma checagem de rotina (Etapa 4, sem IA) pra um concorrente,
 // aplicando o contrato documentado em packages/scraper/README.md:
 //   - scraper_runs.stopped_early_due_to_error fiel ao que run-price-check.ts
@@ -161,58 +316,65 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   const startedAt = Date.now();
   const supabase = createServiceClient();
 
-  const { data: competitor, error: competitorError } = await supabase
-    .from("competitors")
-    .select("id, account_id, name, listing_url, polling_interval_minutes, status, last_checked_at")
-    .eq("id", competitorId)
-    .single();
-
-  if (competitorError || !competitor) {
-    throw new Error(`Concorrente ${competitorId} não encontrado: ${competitorError?.message ?? "sem dados"}`);
+  const lockAcquired = await acquireCheckLock(supabase, competitorId);
+  if (!lockAcquired) {
+    return { competitorId, errorMessage: "Já existe uma checagem em andamento para este concorrente", ...SKIPPED_RESULT_BASE };
   }
 
-  const { data: siteConfig } = await supabase
-    .from("site_configs")
-    .select("id, competitor_id, selectors, version, confidence_score, status, last_validated_at")
-    .eq("competitor_id", competitorId)
-    .eq("status", "ativo")
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!siteConfig) {
-    await recordRun(supabase, {
-      competitor_id: competitorId,
-      run_type: "checagem",
-      success: false,
-      properties_captured: 0,
-      changes_detected: 0,
-      error_message: "Nenhum site_config ativo para este concorrente",
-      stopped_early_due_to_error: false,
-      duration_ms: Date.now() - startedAt,
-    });
-    return {
-      competitorId,
-      success: false,
-      propertiesCaptured: 0,
-      changesDetected: 0,
-      changesByType: EMPTY_CHANGES_BY_TYPE,
-      stoppedEarlyDueToError: false,
-      pausedByCircuitBreaker: false,
-      reactivatedAfterSuccess: false,
-      configMarkedDegraded: false,
-      errorMessage: "Nenhum site_config ativo",
-      properties: [],
-    };
-  }
-
-  let result: Awaited<ReturnType<typeof runPriceCheck>> | null = null;
-  let totalFailureMessage: string | null = null;
   try {
-    result = await runPriceCheck({ listingUrl: competitor.listing_url, config: siteConfig.selectors });
-  } catch (err) {
-    totalFailureMessage = err instanceof Error ? err.message : String(err);
-  }
+    const { data: competitor, error: competitorError } = await supabase
+      .from("competitors")
+      .select("id, account_id, name, listing_url, polling_interval_minutes, status, last_checked_at")
+      .eq("id", competitorId)
+      .single();
+
+    if (competitorError || !competitor) {
+      throw new Error(`Concorrente ${competitorId} não encontrado: ${competitorError?.message ?? "sem dados"}`);
+    }
+
+    const { data: siteConfig } = await supabase
+      .from("site_configs")
+      .select("id, competitor_id, selectors, version, confidence_score, status, last_validated_at")
+      .eq("competitor_id", competitorId)
+      .eq("status", "ativo")
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!siteConfig) {
+      await recordRun(supabase, {
+        competitor_id: competitorId,
+        run_type: "checagem",
+        success: false,
+        properties_captured: 0,
+        changes_detected: 0,
+        error_message: "Nenhum site_config ativo para este concorrente",
+        stopped_early_due_to_error: false,
+        duration_ms: Date.now() - startedAt,
+      });
+      return {
+        competitorId,
+        success: false,
+        propertiesCaptured: 0,
+        changesDetected: 0,
+        changesByType: EMPTY_CHANGES_BY_TYPE,
+        stoppedEarlyDueToError: false,
+        pausedByCircuitBreaker: false,
+        reactivatedAfterSuccess: false,
+        configMarkedDegraded: false,
+        errorMessage: "Nenhum site_config ativo",
+        properties: [],
+        skippedAlreadyRunning: false,
+      };
+    }
+
+    let result: Awaited<ReturnType<typeof runPriceCheck>> | null = null;
+    let totalFailureMessage: string | null = null;
+    try {
+      result = await runPriceCheck({ listingUrl: competitor.listing_url, config: siteConfig.selectors });
+    } catch (err) {
+      totalFailureMessage = err instanceof Error ? err.message : String(err);
+    }
 
   const propertiesCaptured = result?.properties.length ?? 0;
   // Falha total (nem chegou a rodar) conta como "não confiável" pelo mesmo
@@ -269,13 +431,14 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     : { changesDetected: 0, changes: [] };
 
   if (changes.length > 0) {
-    await notifyPropertyChanges(supabase, competitor.account_id, competitor.name, changes);
+    await notifyPropertyChanges(supabase, competitor.account_id, competitorId, competitor.name, changes);
   }
 
   if (configLooksDegraded) {
     await supabase.from("site_configs").update({ status: "degradado" }).eq("id", siteConfig.id);
     await createNotification(supabase, {
       accountId: competitor.account_id,
+      competitorId,
       title: `Concorrente com seletores desatualizados: ${competitor.name}`,
       message: `"${competitor.name}" capturou ${propertiesCaptured} imóveis${
         propertiesCaptured > 0 ? ` (${result!.cardsWithoutPrice} sem preço)` : ""
@@ -292,6 +455,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       await supabase.from("competitors").update({ status: "pausado" }).eq("id", competitorId);
       await createNotification(supabase, {
         accountId: competitor.account_id,
+        competitorId,
         title: `Concorrente pausado: ${competitor.name}`,
         message: `"${competitor.name}" foi pausado automaticamente após ${consecutiveFailures + 1} falhas de rede consecutivas ao tentar checar preços. Verifique se o site está acessível e reative manualmente quando resolver.`,
       });
@@ -309,6 +473,18 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
 
   await finalizeRun(supabase, scraperRunId, changesDetected, Date.now() - startedAt);
 
+  // Só reavalia com execuções limpas — uma que parou cedo por erro de rede
+  // ou que veio degradada (seletor quebrado) não representa a duração real
+  // de uma captura completa, subiria o intervalo por um motivo errado.
+  if (success && !stoppedEarlyDueToError && !configLooksDegraded) {
+    await maybeAdjustPollingInterval(supabase, {
+      id: competitorId,
+      account_id: competitor.account_id,
+      name: competitor.name,
+      polling_interval_minutes: competitor.polling_interval_minutes,
+    });
+  }
+
   await supabase.from("competitors").update({ last_checked_at: new Date().toISOString() }).eq("id", competitorId);
 
   return {
@@ -323,5 +499,12 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     configMarkedDegraded: configLooksDegraded,
     errorMessage: totalFailureMessage,
     properties: result?.properties ?? [],
+    skippedAlreadyRunning: false,
   };
+  } finally {
+    // Libera o lock em QUALQUER saída do try (sucesso, throw, o early
+    // return de "sem site_config ativo") — sem isso, um erro inesperado
+    // deixaria o concorrente preso até o timeout de STALE_LOCK_MINUTES.
+    await releaseCheckLock(supabase, competitorId);
+  }
 }

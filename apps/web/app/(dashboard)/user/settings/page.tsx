@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { PersonalEmailPreferenceToggle } from "../../admin/settings/personal-email-preference-toggle";
+import { AppearanceThemeToggle } from "../../admin/settings/appearance-theme-toggle";
 
 // Mirror de /admin/settings (Etapa 11, mesmo padrão) — mas só a
 // preferência pessoal. Corretor não gerencia os canais da conta (isso é
@@ -20,6 +21,14 @@ export default async function UserSettingsPage() {
           <p className="mt-1 text-xs text-muted">Independente do que a sua conta tiver ligado no geral.</p>
         </div>
         <PersonalEmailPreferenceToggle initialEnabled={profile.email_notifications_enabled} />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Aparência</h2>
+          <p className="mt-1 text-xs text-muted">Preferência pessoal, vale só neste dispositivo.</p>
+        </div>
+        <AppearanceThemeToggle />
       </section>
     </div>
   );
