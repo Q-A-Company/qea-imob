@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { markNotificationReadAction, markNotificationUnreadAction, markAllNotificationsReadAction } from "@/lib/notifications/actions";
 import { CompetitorAvatar } from "../../competitor-avatar";
 import { Card } from "../../card";
+import { Pagination } from "../../pagination";
 
 // Data/hora real — pedido explícito do usuário, não "há Xh"/"há Xm".
 function formatDateTime(value: string) {
@@ -117,27 +117,7 @@ export async function NotificationsContent({
         </ul>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            href={buildUrl(Math.max(1, page - 1))}
-            aria-disabled={page <= 1}
-            className={`text-sm ${page <= 1 ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            ‹ Anterior
-          </Link>
-          <span className="text-sm text-muted">
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={buildUrl(Math.min(totalPages, page + 1))}
-            aria-disabled={page >= totalPages}
-            className={`text-sm ${page >= totalPages ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            Próxima ›
-          </Link>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildUrl={buildUrl} />
     </div>
   );
 }

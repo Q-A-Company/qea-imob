@@ -36,12 +36,12 @@ export function IntervalSelect({ competitorId, minutes, minMinutes }: { competit
   }
 
   return (
-    <div className="flex flex-col items-end gap-0.5">
+    <div className="flex flex-col items-stretch gap-0.5 sm:items-end">
       <select
         value={minutes}
         onChange={handleChange}
         disabled={isPending}
-        className="rounded-md border border-surface-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-signal disabled:opacity-60"
+        className="w-full rounded-md border border-surface-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-signal disabled:opacity-60 sm:w-auto sm:py-1"
       >
         {options.map((m) => (
           <option key={m} value={m} disabled={m < minMinutes} title={m < minMinutes ? `Abaixo do mínimo seguro (${minMinutes} min) para este concorrente` : undefined}>
@@ -50,7 +50,7 @@ export function IntervalSelect({ competitorId, minutes, minMinutes }: { competit
         ))}
       </select>
       {error && (
-        <p className="max-w-40 text-right text-[11px] text-erro-texto" role="alert">
+        <p className="max-w-full text-center text-[11px] text-erro-texto sm:max-w-40 sm:text-right" role="alert">
           {error}
         </p>
       )}

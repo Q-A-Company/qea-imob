@@ -1,5 +1,6 @@
+import { Clock } from "lucide-react";
 import { RankingBars } from "../mini-charts";
-import { InfoTooltip } from "../info-tooltip";
+import { IconChip } from "../icon-chip";
 import type { HourlyVolume } from "./get-dashboard-data";
 
 const TOP_LIMIT = 5;
@@ -25,9 +26,9 @@ export function HourlyVolumeChart({ hourlyVolumes }: { hourlyVolumes: HourlyVolu
 
   return (
     <div className="flex flex-col rounded-lg border border-surface-border bg-surface p-4">
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted">
+      <h3 className="mb-3 flex items-center gap-2.5 text-sm font-medium text-muted">
+        <IconChip icon={Clock} />
         Horários com mais alterações · 30 dias
-        <InfoTooltip text="Os horários do dia (UTC) com mais mudanças de preço detectadas, somando os últimos 30 dias." />
       </h3>
       {top.length === 0 ? (
         <p className="text-sm text-muted">Nenhuma mudança nos últimos 30 dias.</p>

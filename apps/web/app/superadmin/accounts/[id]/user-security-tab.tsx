@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AlertTriangle } from "lucide-react";
 import type { AccountUser } from "@/lib/users/get-account-users";
 import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
+import { IconChip } from "@/app/(dashboard)/icon-chip";
 import { DeleteUserButton, type UserManagementActions } from "./user-management-table";
 
 // Mesma hierarquia de user-management-table.tsx/create-user-form.tsx:
@@ -261,7 +263,10 @@ export function UserSecurityTab({
       </section>
 
       <section className="flex flex-col gap-2 rounded-lg border border-erro/30 bg-erro/5 p-4">
-        <h2 className="text-sm font-semibold text-foreground">Excluir usuário</h2>
+        <h2 className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
+          <IconChip icon={AlertTriangle} tone="erro" />
+          Excluir usuário
+        </h2>
         <p className="text-xs text-muted">Remove o cadastro e o login permanentemente. Não pode ser desfeito.</p>
         <DeleteUserButton user={user} onDelete={actions.deleteUser} />
       </section>

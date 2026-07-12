@@ -5,67 +5,89 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Paleta própria do Q&A Imob (valores exatos fornecidos, não estimativa
-     visual — ver conversa de definição da paleta). --color-sinal é
-     EXCLUSIVO de "mudança detectada"/ação principal — nunca decorativo em
-     outro lugar. sinal/erro/sucesso são declarados aqui só como REFERÊNCIA
-     (valor cheio, mesmo nos dois modos — usados a baixa opacidade em
-     fundo/borda, não precisam variar); a variante de TEXTO de cada uma
-     (--erro-text/--sucesso-text/--signal-text mais abaixo) é que muda
-     entre :root e .dark, porque o valor cheio sozinho não bate 4,5:1 de
-     contraste contra --color-noite (calculado — ver .dark abaixo). */
-  --color-sinal: #625cbb;
-  --color-erro: #883a38; /* avisos e erros */
-  --color-sucesso: #507707;
+  /* Segunda geração da paleta (redesign completo — ver conversa de
+     definição): saiu o par "quase-preto + acento roxo" (reconhecível como
+     template de IA), entrou uma família de material de agrimensor/cadastro
+     imobiliário — papel vegetal + tinta técnica nos dois extremos de
+     neutro (mesmo viés de matiz frio-acinzentado nos dois, não dois
+     conceitos desencontrados), com acentos quentes (latão, ferrugem,
+     musgo) por cima. --color-latao é EXCLUSIVO de "mudança detectada"/ação
+     principal — nunca decorativo em outro lugar; direção-agnóstico de
+     propósito (alta ou queda de preço usam a mesma cor — "mudou" é uma
+     informação, "é bom pra você" é outra, e cabe ao usuário julgar).
+     Contraste calculado com script (WCAG relative luminance), não
+     estimativa visual — valores comentados abaixo em cada linha. */
+  --color-latao: #c4923a; /* mudança detectada — dourado de instrumento/etiqueta de preço, NUNCA decorativo fora desse papel */
+  --color-ferrugem: #9c4a3c; /* avisos e erros — ~5,40:1 sobre --color-papel, passa direto */
+  --color-musgo: #4f6b1c; /* sucesso — ~5,41:1 sobre --color-papel, passa direto */
 
-  --color-noite: #09090b; /* fundo geral modo escuro */
-  --color-carvao: #18181b; /* fundo de superfícies elevadas modo escuro — cards, gráficos, sidebar/nav; qualquer elemento com fundo próprio, distinto do fundo geral (--color-noite) */
-  --color-alvorada: #fafaf8; /* fundo geral modo claro */
-  --color-tinta: #1f1d1b; /* texto primário modo claro */
-  --color-neve: #f5f4f2; /* texto primário modo escuro */
-  --color-grafite: #8e8d89; /* texto secundário/ícones/bordas nos dois modos */
+  /* Segunda rodada de ajuste (só modo escuro — modo claro intocado): fundo
+     geral, superfície elevada e nav agora são 3 tons quase-pretos bem
+     próximos entre si (--color-tinteiro < --color-breu < --color-carvao em
+     luminância, mas só ~1,01–1,04:1 de diferença entre eles — separação
+     bem mais sutil que a rodada anterior, por pedido explícito). Contraste
+     dos acentos (latão/ferrugem/musgo/anil) como TEXTO recalculado via
+     script contra os 3 novos tons, não presumido — todos os valores de
+     --*-text existentes (ver .dark abaixo) continuam passando AA, e
+     inclusive MELHORARAM (fundo mais escuro ajudou aqui porque os acentos
+     são todos claros/médios — não seria automático se fossem escuros). */
+  --color-tinteiro: #030303; /* fundo geral modo escuro */
+  --color-breu: #090909; /* sidebar/nav modo escuro — tom próprio, não reaproveita mais --color-carvao */
+  --color-carvao: #0a0a0a; /* fundo de superfícies elevadas modo escuro — cards, gráficos */
+  --color-papel: #f0f2f0; /* fundo geral modo claro — papel vegetal, frio, não creme */
+  --color-tinta: #161c1e; /* texto primário modo claro — ~15,3:1 sobre --color-papel */
+  --color-neve: #eaeeec; /* texto primário modo escuro — ~15,0:1 sobre --color-tinteiro */
+  --color-grafite: #7c8783; /* texto secundário/ícones/bordas nos dois modos */
 
-  --color-grafico-roxo: #625cbb; /* gráficos agregados (não organizados por concorrente) — paleta categórica de concorrentes fica intacta em lib/categorical-colors.ts */
-  --color-grafico-azul: #3f72b4;
+  --color-grafico-roxo: #c4923a; /* gráficos agregados (não organizados por concorrente) — reaproveita o latão; paleta categórica de concorrentes fica intacta em lib/categorical-colors.ts */
+  --color-grafico-azul: #3d6e94; /* "anil" — azul-cadastral, segunda cor de gráfico agregado */
 
-  --background: var(--color-alvorada);
+  --background: var(--color-papel);
   --foreground: var(--color-tinta);
   --surface: #ffffff;
   --surface-border: color-mix(in srgb, var(--color-grafite) 20%, transparent);
   --muted: var(--color-grafite);
-  --signal: var(--color-sinal);
-  --signal-text: var(--color-sinal); /* já passa AA (~5,3:1) sobre --color-alvorada */
-  --erro: var(--color-erro);
-  --erro-text: var(--color-erro); /* ~7,4:1 sobre --color-alvorada */
-  --sucesso: var(--color-sucesso);
-  --sucesso-text: var(--color-sucesso); /* ~5,1:1 sobre --color-alvorada */
-  /* Fundo só da sidebar/nav lateral — mesmo tom de --surface (superfície
-     elevada) nos dois modos agora: branco no claro, --color-carvao no
-     escuro (ver .dark abaixo), distinguido do fundo geral pela borda. */
+  --signal: var(--color-latao);
+  /* Único valor de --*-text que escurece no modo CLARO em vez de clarear no
+     escuro (o inverso do padrão erro/sucesso abaixo) — --color-latao é um
+     dourado médio-claro, feito pra "brilhar" contra fundo escuro (passa
+     ~6,3:1 direto contra --color-tinteiro, ver .dark), mas contra
+     --color-papel (claro) o mesmo valor cheio cai pra ~2,5:1. */
+  --signal-text: #8a5f1f; /* ~4,99:1 sobre --color-papel */
+  --erro: var(--color-ferrugem);
+  --erro-text: var(--color-ferrugem); /* ~5,40:1 sobre --color-papel, valor cheio já serve */
+  --sucesso: var(--color-musgo);
+  --sucesso-text: var(--color-musgo); /* ~5,41:1 sobre --color-papel, valor cheio já serve */
+  /* Fundo só da sidebar/nav lateral — branco no claro (mesmo tom de
+     --surface); no escuro agora é --color-breu, um tom PRÓPRIO (ver .dark
+     abaixo) — não reaproveita mais --color-carvao, a pedido explícito de
+     ter os 3 tons quase-pretos (fundo/nav/superfície) sutilmente distintos
+     entre si em vez de nav=cards. */
   --nav: #ffffff;
 }
 
 .dark {
-  --background: var(--color-noite);
+  --background: var(--color-tinteiro);
   --foreground: var(--color-neve);
   --surface: var(--color-carvao);
   --surface-border: color-mix(in srgb, var(--color-grafite) 35%, transparent);
   --muted: var(--color-grafite);
-  /* Variantes clareadas (mesmo H/S da cor base, só mais claras) — calculado
-     contra o --color-noite anterior (#1a1a19); o atual (#09090b) é mais
-     escuro ainda, então o contraste real só melhorou (valores abaixo
-     continuam válidos como piso, não ficaram desatualizados pra pior).
-     fundo/borda (--signal/--erro/--sucesso) continuam com o valor cheio —
-     só usados a baixa opacidade, não precisam da variante clara. */
-  --signal-text: #7f7ac7; /* ~4,57:1 sobre --color-noite (piso — real é maior) */
-  --erro-text: #c16a67; /* ~4,58:1 sobre --color-noite (piso — real é maior) */
-  --sucesso-text: #71a90a; /* ~6,12:1 sobre --color-noite (piso — real é maior) */
-  /* Nav agora usa a mesma superfície elevada dos cards (--color-carvao),
-     igual ao modo claro (nav = --surface, ver comentário em :root) — antes
-     era MAIS escura que o fundo geral (#0d0d0d vs #1a1a19); com o fundo
-     geral ficando ainda mais escuro (#09090b), manter essa relação teria
-     deixado a nav quase indistinguível do resto. */
-  --nav: var(--color-carvao);
+  /* fundo/borda (--signal/--erro/--sucesso) continuam com o valor cheio —
+     só usados a baixa opacidade, não precisam da variante clara.
+     Recalculado contra os 3 novos tons quase-pretos (não presumido): o
+     valor cheio de --color-latao passa ~7,1–7,4:1 (pior caso, contra
+     --color-breu, é ~7,13:1) — melhorou em vez de piorar, mesmo com o
+     fundo mais escuro, porque latão é um tom claro (o oposto aconteceria
+     se o acento fosse escuro). erro-text/sucesso-text abaixo, mesma
+     verificação: ambos melhoraram (piores casos ~6,15:1 e ~7,39:1). */
+  --signal-text: var(--color-latao);
+  --erro-text: #c97a75; /* ~6,15:1 sobre --color-carvao (pior caso dos 3 tons) */
+  --sucesso-text: #82ab3e; /* ~7,39:1 sobre --color-carvao (pior caso dos 3 tons) */
+  /* Nav agora usa --color-breu, tom próprio — não mais igual a --surface
+     (--color-carvao) como no modo claro. Distinta do fundo geral
+     (--color-tinteiro) e das superfícies elevadas por uma diferença bem
+     sutil de luminância (~1,01–1,04:1 entre os 3 tons) + a borda. */
+  --nav: var(--color-breu);
 }
 
 @theme inline {
@@ -77,11 +99,13 @@
   --color-signal: var(--signal);
   --color-signal-text: var(--signal-text);
   /* Texto sobre fundo preenchido com --color-signal (ex: botão de CTA) —
-     sempre claro, nos dois temas: diferente do Signal Amber antigo (sempre
-     claro), --color-sinal é um roxo médio/escuro (luminância baixa), então
-     texto escuro em cima não teria contraste (calculado: ~3,0:1, abaixo de
-     AA) — só texto claro funciona (~5,1:1). */
-  --color-signal-on: var(--color-neve);
+     sempre ESCURO agora, nos dois temas: --color-latao é um dourado
+     médio-claro (luminância alta), o inverso do roxo antigo — texto claro
+     em cima não teria contraste (calculado: ~2,4:1, abaixo de AA), só
+     texto escuro funciona (~6,2:1). Referencia --color-tinta diretamente
+     (valor fixo, não redefinido em .dark — ver :root) porque o botão fica
+     sempre com o mesmo fundo dourado, independente do tema da página. */
+  --color-signal-on: var(--color-tinta);
   --color-erro: var(--erro);
   --color-erro-texto: var(--erro-text);
   --color-sucesso: var(--sucesso);
@@ -145,106 +169,56 @@ dialog {
   margin: auto;
 }
 
-/* Elemento de assinatura do Painel: feixe de varredura no card "Mudanças
-   nas últimas 24 horas". Terceira revisão — efeito "lanterna/farol": largura
-   CONSTANTE (50° no total — ajustado a pedido do usuário, era 35°), com só
-   as duas pontas (8° cada) suavizadas pra transparente; o miolo (8°–42°)
-   fica "chapado" na mesma opacidade do início ao fim, sem nenhum stop
-   intermediário reduzindo — diferente da versão anterior ("cometa", fade
-   progressivo ao longo de todo o arco).
-   A máscara radial (fade por DISTÂNCIA do centro, não por ângulo) segue
-   igual — resolveu de vez a borda reta aparecendo nos cantos do card
-   retangular, não depende da forma do feixe em si. Congela automaticamente
-   com prefers-reduced-motion (regra global abaixo já reduz
-   animation-duration pra todos os elementos) — a forma do feixe já fica
-   visível parada, sem tratamento extra. */
-.radar-sweep {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  border-radius: inherit;
+/* Elemento de assinatura do Painel: "Placar" — tiles de dígito que viram
+   como um quadro de embarque/placa de posto de gasolina (ver flip-tile.tsx).
+   Substitui o radar-sweep giratório (feixe cônico + blips em loop infinito
+   de 9s) — decisão do redesign completo: radar/vigilância é uma metáfora
+   genérica (caberia em qualquer dashboard de segurança/fraude), enquanto um
+   número que vira fisicamente é especificamente sobre PREÇO MUDANDO DE
+   VALOR, que é o produto inteiro. Também resolve o problema de "animação
+   ambiente que nunca para" — o Placar vira uma vez (carga real de dado) ou
+   reage a uma mudança real, nunca fica girando sozinho.
+   .flip-tile-face é a face visível de cada dígito; a transição em si
+   (rotateX) é feita via Motion (framer-motion) no componente React, não
+   aqui — CSS só define a caixa/tipografia da face, consistente com o resto
+   do arquivo (que só define o que não muda por interação/estado do React). */
+.flip-tile-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  backface-visibility: hidden;
 }
-.radar-sweep::after {
+
+/* Pulso de "última verificação" — resquício bem menor do radar antigo, só
+   ao lado do horário de último check de cada concorrente (competitors-list.tsx).
+   Sem giro, sem loop pintando um círculo inteiro: só um ponto que pisca
+   3 vezes e para (animation-iteration-count fixo, não infinite) no momento
+   em que o card é montado — não uma animação ambiente permanente. */
+.check-pulse {
+  position: relative;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-sucesso);
+}
+.check-pulse::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--color-sinal) 65%, transparent) 8deg,
-    color-mix(in srgb, var(--color-sinal) 65%, transparent) 42deg,
-    transparent 50deg,
-    transparent 360deg
-  );
-  /* conic-gradient colore por ÂNGULO — ao longo de um raio, a cor é
-     uniforme do centro até a borda da caixa. Num card retangular (não
-     quadrado), os cantos ficam bem mais longe do centro que o meio das
-     bordas; quando o feixe varre um canto, a cor chegava perto o bastante
-     da borda real do card pra essa borda (sempre reta/nítida, por ser um
-     elemento de verdade) ficar visível contra a área colorida — lido como
-     "corte reto" no feixe, mas na verdade era a borda do card aparecendo.
-     A máscara radial abaixo apaga o feixe por DISTÂNCIA do centro,
-     garantindo que ele sempre desapareça bem antes de alcançar qualquer
-     borda, em qualquer direção — independente da proporção do card. */
-  mask-image: radial-gradient(ellipse at center, black 0%, black 45%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at center, black 0%, black 45%, transparent 80%);
-  animation: radar-spin 9s linear infinite;
-}
-@keyframes radar-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Blips de radar — um ponto por concorrente ativo, posicionado ao redor do
-   círculo (ver RadarBlips em dashboard-client.tsx, que calcula --blip-angle,
-   --blip-delay e --blip-radius por ponto). rotate(--blip-angle)
-   translateY(--blip-radius) é o mesmo truque de posicionar-em-círculo-sem-
-   trigonometria usado noutros lugares: gira o sistema de coordenadas e
-   empurra o ponto "pra cima" nessa nova direção, na mesma convenção
-   horário-a-partir-de-12h do conic-gradient/rotate() do feixe acima — então
-   o cálculo de delay bate certo com a posição visual. --blip-radius varia
-   por ponto (20–32px, ver pseudoRandomFraction em dashboard-client.tsx) só
-   pra evitar todos ficarem no mesmo círculo perfeito (com 2 blips
-   diametralmente opostos e mesmo raio, formavam uma reta óbvia passando
-   pelo centro); a faixa inteira fica dentro da zona 100% visível da máscara
-   radial do feixe (que só começa a apagar depois de 45% da distância ao
-   centro), então os blips nunca ficam pré-esmaecidos pela máscara, só pela
-   própria animação de pisca. Repouso em opacity:0 (totalmente invisível,
-   não só esmaecido) — só aparece durante a janela estreita em que o feixe
-   passa por cima, ver keyframe abaixo. --blip-angle/--blip-radius precisam
-   estar DENTRO do keyframe (não só na declaração base) porque a animação
-   anima `transform` inteiro — sem repetir rotate/translateY em cada estado
-   do keyframe, o pulso de scale substituiria a posição em vez de só somar a
-   ela. */
-.radar-blip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  margin: -2.5px;
   border-radius: 50%;
-  background: var(--color-sinal);
-  opacity: 0;
-  pointer-events: none;
-  transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1);
-  animation: radar-blip-pulse 9s linear infinite;
-  animation-delay: var(--blip-delay);
+  background: var(--color-sucesso);
+  animation: check-pulse-ring 1.8s ease-out 2;
 }
-@keyframes radar-blip-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1.4);
-    box-shadow: 0 0 5px 1px var(--color-sinal);
+@keyframes check-pulse-ring {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
   }
-  5%,
-  95% {
+  100% {
     opacity: 0;
-    transform: rotate(var(--blip-angle)) translateY(var(--blip-radius)) scale(1);
-    box-shadow: none;
+    transform: scale(2.6);
   }
 }
 

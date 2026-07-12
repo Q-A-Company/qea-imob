@@ -4,7 +4,9 @@ import type { PropertyChangeType } from "@/lib/supabase/types";
 
 export interface FeedItem {
   id: string;
+  competitorId: string;
   competitorName: string;
+  competitorAbbreviation: string;
   referenceCode: string | null;
   url: string;
   changeType: PropertyChangeType;
@@ -45,6 +47,10 @@ export interface DashboardData {
   activeCompetitorsCount: number;
   changes1h: number;
   changes24h: number;
+  // Janela de 24-48h atrás — mesmo tamanho de changes24h, imediatamente
+  // anterior. Só existe pra alimentar o indicador percentual da KpiCard
+  // (ver kpi-card.tsx); não é exibido em lugar nenhum sozinho.
+  changesPrevious24h: number;
   changes7d: number;
   feed: FeedItem[];
   dailyVolumes: DailyVolume[];
@@ -137,6 +143,7 @@ async function fetchAllChanges(
 const EMPTY_DASHBOARD_DATA: Omit<DashboardData, "hasCompetitors" | "activeCompetitorsCount" | "dailyVolumes"> = {
   changes1h: 0,
   changes24h: 0,
+  changesPrevious24h: 0,
   changes7d: 0,
   feed: [],
   breakdownByWindow: { "24h": [], "7d": [], "30d": [] },
@@ -199,6 +206,7 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
   const now = Date.now();
   let changes1h = 0;
   let changes24h = 0;
+  let changesPrevious24h = 0;
   let changes7d = 0;
   const dailyCounts = new Map<string, number>();
   const hourlyCounts = new Map<number, number>();
@@ -221,9 +229,11 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
     const ageMs = now - detectedAtMs;
     const isWithin1h = ageMs <= ONE_HOUR_MS;
     const isWithin24h = ageMs <= ONE_DAY_MS;
+    const isWithinPrevious24h = ageMs > ONE_DAY_MS && ageMs <= ONE_DAY_MS * 2;
     const isWithin7d = ageMs <= SEVEN_DAYS_MS;
     if (isWithin1h) changes1h++;
     if (isWithin24h) changes24h++;
+    if (isWithinPrevious24h) changesPrevious24h++;
     if (isWithin7d) changes7d++;
 
     const dayKey = change.detected_at.slice(0, 10);
@@ -258,7 +268,9 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
       if (feed.length < 15) {
         feed.push({
           id: change.id,
+          competitorId,
           competitorName: competitorMeta.get(competitorId)?.name ?? "Concorrente removido",
+          competitorAbbreviation: competitorMeta.get(competitorId)?.abbreviation ?? "???",
           referenceCode: property.reference_code,
           url: property.url,
           changeType: change.change_type,
@@ -296,6 +308,7 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
     activeCompetitorsCount,
     changes1h,
     changes24h,
+    changesPrevious24h,
     changes7d,
     feed,
     dailyVolumes,

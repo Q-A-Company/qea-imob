@@ -1,6 +1,7 @@
+import { Flame } from "lucide-react";
 import { RankingBars } from "../mini-charts";
-import { InfoTooltip } from "../info-tooltip";
 import { PropertyReferenceLink } from "../property-reference-link";
+import { IconChip } from "../icon-chip";
 import { colorForCompetitor } from "@/lib/categorical-colors";
 import type { VolatileProperty } from "./get-dashboard-data";
 
@@ -9,9 +10,9 @@ import type { VolatileProperty } from "./get-dashboard-data";
 export function VolatilePropertiesCard({ properties }: { properties: VolatileProperty[] }) {
   return (
     <div className="flex flex-col rounded-lg border border-surface-border bg-surface p-4">
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted">
+      <h3 className="mb-3 flex items-center gap-2.5 text-sm font-medium text-muted">
+        <IconChip icon={Flame} />
         Imóveis mais voláteis · 30 dias
-        <InfoTooltip text="Imóveis com mais mudanças de preço registradas nos últimos 30 dias — indicativo de precificação dinâmica ou possível erro de captura." />
       </h3>
       {properties.length === 0 ? (
         <p className="text-sm text-muted">Nenhuma mudança nos últimos 30 dias.</p>

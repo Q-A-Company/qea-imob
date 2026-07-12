@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { deleteCompetitorPermanentlyAction } from "@/lib/competitors/actions";
+import { IconButton } from "../../icon-button";
 
 const DELETE_CONFIRMATION_WORD = "EXCLUIR";
 
@@ -38,15 +39,7 @@ export function DeleteCompetitorButton({ competitorId, competitorName }: { compe
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openDialog}
-        aria-label="Excluir permanentemente"
-        title="Excluir permanentemente"
-        className="rounded-md p-1.5 text-muted hover:bg-erro/10 hover:text-erro-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      <IconButton icon={Trash2} label="Excluir permanentemente" variant="destructive" size="compact" onClick={openDialog} />
       <dialog
         ref={dialogRef}
         className="rounded-lg border border-surface-border bg-surface p-0 text-foreground backdrop:bg-black/50"

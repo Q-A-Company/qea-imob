@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { AccountAuditLogRow } from "@/lib/audit/get-account-audit-log";
 import { ACCOUNT_ACTIVITY_PAGE_SIZE } from "@/lib/audit/get-account-audit-log";
 import { formatAuditEvent } from "@/lib/audit/format-event";
+import { Pagination } from "@/app/(dashboard)/pagination";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
@@ -47,27 +47,7 @@ export function AccountActivityList({
         ))}
       </ul>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            href={buildUrl({ page: String(Math.max(1, page - 1)) })}
-            aria-disabled={page <= 1}
-            className={`text-sm ${page <= 1 ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            ‹ Anterior
-          </Link>
-          <span className="text-sm text-muted">
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={buildUrl({ page: String(Math.min(totalPages, page + 1)) })}
-            aria-disabled={page >= totalPages}
-            className={`text-sm ${page >= totalPages ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            Próxima ›
-          </Link>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildUrl={(p) => buildUrl({ page: String(p) })} />
     </div>
   );
 }

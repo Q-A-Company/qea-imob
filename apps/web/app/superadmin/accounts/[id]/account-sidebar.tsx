@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AccountMenu } from "@/app/(dashboard)/account-menu";
+import { IconButton } from "@/app/(dashboard)/icon-button";
 import type { UserRole } from "@/lib/supabase/types";
 
 interface NavItem {
@@ -102,15 +103,14 @@ export function AccountSidebar({
               Acompanhe seus concorrentes em tempo real!
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={pinned ? PanelLeftClose : PanelLeftOpen}
+            label={pinned ? "Recolher menu" : "Fixar menu expandido"}
+            ariaPressed={pinned}
+            size="compact"
             onClick={onTogglePin}
-            aria-label={pinned ? "Recolher menu" : "Fixar menu expandido"}
-            aria-pressed={pinned}
-            className={`shrink-0 rounded-md p-1 text-muted hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${labelOpacityClass}`}
-          >
-            {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-          </button>
+            className={labelOpacityClass}
+          />
         </div>
         {/* overflow-x-hidden explícito — ver comentário equivalente em
             (dashboard)/sidebar.tsx (mesma causa: overflow-y-auto sozinho

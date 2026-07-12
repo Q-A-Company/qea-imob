@@ -81,10 +81,9 @@ export function AccountMenu({
           onClick={handleOpen}
           aria-expanded={open}
           aria-label="Menu da conta"
-          className="flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium text-muted"
+          className="flex flex-1 items-center justify-center rounded-md py-2.5 text-muted"
         >
           <Avatar avatarUrl={avatarUrl} fullName={fullName} size="sm" />
-          Conta
         </button>
       )}
 

@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AccountMenu } from "./account-menu";
+import { IconButton } from "./icon-button";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
@@ -143,15 +144,14 @@ export function Sidebar({
               Acompanhe seus concorrentes em tempo real!
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={pinned ? PanelLeftClose : PanelLeftOpen}
+            label={pinned ? "Recolher menu" : "Fixar menu expandido"}
+            ariaPressed={pinned}
+            size="compact"
             onClick={onTogglePin}
-            aria-label={pinned ? "Recolher menu" : "Fixar menu expandido"}
-            aria-pressed={pinned}
-            className={`shrink-0 rounded-md p-1 text-muted hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${labelOpacityClass}`}
-          >
-            {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-          </button>
+            className={labelOpacityClass}
+          />
         </div>
         {/* overflow-x-hidden explícito — sem isso, overflow-y-auto sozinho
             força overflow-x para "auto" também (regra da spec de CSS: um
@@ -169,14 +169,26 @@ export function Sidebar({
               <li key={item.key}>
                 {/* group/navlink separado do group da nav inteira (que revela o
                     texto no hover) — escala só o ícone deste link, no hover
-                    dele especificamente, sem afetar os outros itens. */}
+                    dele especificamente, sem afetar os outros itens.
+                    Item ativo: wash de latão em baixa opacidade (não sólido —
+                    isso seria opacidade demais pra um item de lista), texto/
+                    ícone em --signal-text, e uma barra fina (3px, rounded-full)
+                    na borda esquerda via ::before absoluto — `relative`
+                    sempre presente (não só quando ativo) pra não recalcular
+                    layout ao trocar de página. A barra fica inset verticalmente
+                    (top/bottom 6px) em vez de inset-y-0, pra nunca entrar na
+                    curva do rounded-md do próprio item (fica só no trecho reto
+                    da borda). Funciona igual recolhida (w-16, só ícone) e
+                    expandida (w-56, hover/pin) — é o mesmo elemento nos dois
+                    estados, só a label que aparece/some por cima. */}
                 <Link
                   href={item.href}
                   onClick={blurOnMouseClick}
-                  className={`group/navlink flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
-                    active ? "bg-foreground/5 text-foreground" : "text-muted hover:bg-background hover:text-foreground"
+                  className={`group/navlink relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+                    active ? "bg-signal/10 text-signal-text" : "text-muted hover:bg-background hover:text-foreground"
                   }`}
                 >
+                  {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-signal" aria-hidden />}
                   <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
                   <span className={labelOpacityClass}>{item.label}</span>
                 </Link>
@@ -201,7 +213,11 @@ export function Sidebar({
           chip de conta (Configurações/Sair) entra como último item, mesmo
           popover de cima. Notificações não entra aqui — o sino flutuante
           (dashboard-chrome.tsx) já cobre mobile também, sendo fixed em
-          viewport, não só desktop. */}
+          viewport, não só desktop.
+          Sem rótulo de texto sob o ícone (só aria-label, pra leitor de
+          tela) — com até 6 itens de navegação + chip de conta dividindo a
+          largura em partes iguais, texto de 10px por baixo de cada ícone
+          ficava espremido/cortado numa tela de telefone real. */}
       <nav
         aria-label="Navegação principal"
         className="print:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-surface-border bg-nav py-1 md:hidden"
@@ -215,12 +231,11 @@ export function Sidebar({
               href={item.href}
               aria-label={item.label}
               onClick={blurOnMouseClick}
-              className={`group/navlink flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
+              className={`group/navlink flex flex-1 items-center justify-center rounded-md py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
                 active ? "text-signal-text" : "text-muted"
               }`}
             >
               <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
-              {item.label}
             </Link>
           );
         })}

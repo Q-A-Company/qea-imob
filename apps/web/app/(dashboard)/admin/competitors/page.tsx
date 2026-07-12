@@ -1,16 +1,22 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { minimumSafeIntervalMinutes } from "scraper/core/polling-interval";
+import { minimumSafeIntervalMinutes, medianDurationMs } from "scraper/core/polling-interval";
 import { RegisterCompetitorForm } from "./register-form";
 import { CompetitorsList } from "./competitors-list";
 
 const INTERVAL_RECHECK_SAMPLE_SIZE = 3;
 
-// Mesmo cálculo de maybeAdjustPollingInterval (packages/scraper/jobs/
-// check-competitor.ts, que ajusta sozinho depois de cada checagem) — aqui
-// só pra decidir quais opções do <select> ficam desabilitadas por
-// concorrente (minimumSafeIntervalMinutes é a mesma função das duas
-// pontas). Um concorrente sem nenhuma checagem limpa ainda (recém-
+// Mesma fonte de dado e mesma função de packages/scraper/jobs/
+// check-competitor.ts (maybeAdjustPollingInterval) — confirmado
+// empiricamente contra o banco real que as duas queries produzem
+// exatamente as mesmas 3 execuções e a mesma mediana (investigação do
+// caso Podium/Muller). Mediana, não média (mesmo motivo do ajuste
+// automático: um outlier isolado não deveria dominar o piso exibido).
+// Multiplicador padrão (SAFETY_MULTIPLIER, sem a histerese de descida do
+// ajuste automático) — este é o piso de segurança pra escolha MANUAL no
+// seletor, não o gatilho do ajuste automático; não faz sentido ficar mais
+// permissivo aqui só porque o automático tem uma banda morta pra evitar
+// oscilação. Um concorrente sem nenhuma checagem limpa ainda (recém-
 // cadastrado) cai no fallback do próprio minimumSafeIntervalMinutes(0) —
 // menor degrau disponível, nada desabilitado.
 async function getMinIntervalByCompetitorId(
@@ -41,8 +47,7 @@ async function getMinIntervalByCompetitorId(
   const result = new Map<string, number>();
   for (const id of competitorIds) {
     const durations = durationsByCompetitor.get(id) ?? [];
-    const avgDurationMs = durations.length > 0 ? durations.reduce((sum, d) => sum + d, 0) / durations.length : 0;
-    result.set(id, minimumSafeIntervalMinutes(avgDurationMs).minutes);
+    result.set(id, minimumSafeIntervalMinutes(medianDurationMs(durations)).minutes);
   }
   return result;
 }

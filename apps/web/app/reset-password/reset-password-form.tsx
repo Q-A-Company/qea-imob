@@ -84,7 +84,7 @@ export function ResetPasswordForm() {
   }
 
   if (stage === "loading") {
-    return <p className="text-sm text-neutral-500 dark:text-neutral-400">Verificando link...</p>;
+    return <p className="text-sm text-muted">Verificando link...</p>;
   }
 
   if (stage === "invalid") {
@@ -93,7 +93,7 @@ export function ResetPasswordForm() {
         <p className="text-sm text-erro-texto" role="alert">
           Este link de recuperação é inválido ou já expirou.
         </p>
-        <a href="/forgot-password" className="text-sm text-neutral-500 hover:underline dark:text-neutral-400">
+        <a href="/forgot-password" className="text-sm text-muted hover:underline">
           Solicitar um novo link
         </a>
       </div>
@@ -107,7 +107,7 @@ export function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <label htmlFor="newPassword" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+        <label htmlFor="newPassword" className="text-sm font-medium text-muted">
           Nova senha
         </label>
         <input
@@ -118,11 +118,11 @@ export function ResetPasswordForm() {
           autoComplete="new-password"
           minLength={8}
           required
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-800"
+          className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="confirmPassword" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+        <label htmlFor="confirmPassword" className="text-sm font-medium text-muted">
           Confirmar nova senha
         </label>
         <input
@@ -133,7 +133,7 @@ export function ResetPasswordForm() {
           autoComplete="new-password"
           minLength={8}
           required
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-800"
+          className="rounded-md border border-surface-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
         />
       </div>
 
@@ -146,7 +146,7 @@ export function ResetPasswordForm() {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-60 dark:bg-neutral-50 dark:text-neutral-900"
+        className="mt-2 rounded-md bg-signal px-4 py-2 text-sm font-semibold text-signal-on hover:opacity-90 disabled:opacity-60"
       >
         {isSubmitting ? "Salvando..." : "Definir nova senha"}
       </button>

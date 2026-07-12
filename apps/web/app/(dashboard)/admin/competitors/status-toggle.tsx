@@ -32,17 +32,17 @@ export function StatusToggle({ competitorId, status }: { competitorId: string; s
   }
 
   return (
-    <div className="flex flex-col items-end gap-0.5">
+    <div className="flex flex-col items-stretch gap-0.5 sm:items-end">
       <button
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className={`rounded-md border px-3 py-1.5 text-sm disabled:opacity-60 ${toneClass}`}
+        className={`w-full rounded-md border px-2 py-1.5 text-xs disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm ${toneClass}`}
       >
         {isPending ? "Aguarde..." : isPaused ? "Retomar" : "Pausar"}
       </button>
       {error && (
-        <p className="max-w-40 text-right text-[11px] text-erro-texto" role="alert">
+        <p className="max-w-full text-center text-[11px] text-erro-texto sm:max-w-40 sm:text-right" role="alert">
           {error}
         </p>
       )}

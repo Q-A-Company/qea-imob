@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { defaultDateRange } from "./default-date-range";
+import { Checkbox } from "../../checkbox";
+import { Radio } from "../../radio";
 import type { ChangeType, ReportFilters } from "./get-report-data";
 
 const inputClass =
@@ -131,7 +133,7 @@ export function ReportFiltersForm({
               const checked = allSelected || (selectedCompetitors?.includes(c.id) ?? false);
               return (
                 <label key={c.id} className="flex items-center gap-1.5 text-sm text-foreground">
-                  <input type="checkbox" checked={checked} onChange={() => toggleCompetitor(c.id)} />
+                  <Checkbox checked={checked} onChange={() => toggleCompetitor(c.id)} />
                   {c.abbreviation}
                 </label>
               );
@@ -141,10 +143,10 @@ export function ReportFiltersForm({
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted">Período</span>
-          <div className="flex items-center gap-2">
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass} />
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputClass} w-full sm:w-auto`} />
             <span className="text-xs text-muted">até</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} />
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputClass} w-full sm:w-auto`} />
           </div>
           {(from || to) && (
             <button type="button" onClick={clearDateRange} className="w-fit text-xs text-muted hover:underline">
@@ -157,15 +159,15 @@ export function ReportFiltersForm({
           <span className="text-xs font-medium text-muted">Tipo de mudança</span>
           <div className="flex gap-3">
             <label className="flex items-center gap-1.5 text-sm text-foreground">
-              <input type="checkbox" checked={types.includes("preco")} onChange={() => toggleType("preco")} />
+              <Checkbox checked={types.includes("preco")} onChange={() => toggleType("preco")} />
               Preço
             </label>
             <label className="flex items-center gap-1.5 text-sm text-foreground">
-              <input type="checkbox" checked={types.includes("adicionado")} onChange={() => toggleType("adicionado")} />
+              <Checkbox checked={types.includes("adicionado")} onChange={() => toggleType("adicionado")} />
               Adicionado
             </label>
             <label className="flex items-center gap-1.5 text-sm text-foreground">
-              <input type="checkbox" checked={types.includes("disponibilidade")} onChange={() => toggleType("disponibilidade")} />
+              <Checkbox checked={types.includes("disponibilidade")} onChange={() => toggleType("disponibilidade")} />
               Disponibilidade
             </label>
           </div>
@@ -188,7 +190,7 @@ export function ReportFiltersForm({
             <div className="flex gap-3">
               {(["ambos", "aumento", "reducao"] as const).map((d) => (
                 <label key={d} className="flex items-center gap-1.5 text-sm text-foreground">
-                  <input type="radio" name="direction" checked={direction === d} onChange={() => setDirection(d)} />
+                  <Radio name="direction" checked={direction === d} onChange={() => setDirection(d)} />
                   {d === "ambos" ? "Ambas" : d === "aumento" ? "Aumento" : "Redução"}
                 </label>
               ))}
@@ -219,7 +221,7 @@ export function ReportFiltersForm({
             <div className="flex gap-3">
               {(["ambos", "ativo", "possivelmente_vendido"] as const).map((s) => (
                 <label key={s} className="flex items-center gap-1.5 text-sm text-foreground">
-                  <input type="radio" name="status" checked={status === s} onChange={() => setStatus(s)} />
+                  <Radio name="status" checked={status === s} onChange={() => setStatus(s)} />
                   {s === "ambos" ? "Ambos" : s === "ativo" ? "Ativo" : "Possiv. vendido"}
                 </label>
               ))}

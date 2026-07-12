@@ -3,7 +3,7 @@ import { createServiceClient, type ScraperRunInsert } from "../core/db.js";
 import { runPriceCheck } from "./run-price-check.js";
 import { persistAndDetectChanges, type DetectedChange } from "./persist-and-compare.js";
 import { createNotification } from "../core/notify.js";
-import { minimumSafeIntervalMinutes } from "../core/polling-interval.js";
+import { minimumSafeIntervalMinutes, medianDurationMs, SAFETY_MULTIPLIER, DECREASE_SAFETY_MULTIPLIER } from "../core/polling-interval.js";
 import type { ExtractedProperty } from "../core/types.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -207,22 +207,37 @@ async function countConsecutiveNetworkFailures(supabase: SupabaseClient, competi
   return count;
 }
 
-// Média das últimas execuções — não só a mais recente — pra não deixar um
-// outlier pontual (rede lenta num dia específico) empurrar o intervalo pra
-// cima permanentemente: a regra só AUMENTA sozinha, nunca diminui, então
-// um outlier ficaria "grudado" se fosse a única amostra. Com 1 execução
-// disponível (primeira checagem real do concorrente), a média já é essa 1
-// execução — não precisa de caso especial pra "é a primeira vez".
+// Mediana das últimas execuções — não a mais recente sozinha, nem a média
+// (troca feita junto com o ajuste virar bidirecional: a média deixa UMA
+// execução lenta isolada puxar o intervalo, a mediana ignora esse tipo de
+// outlier tanto pra cima quanto pra baixo). Com 1 execução disponível
+// (primeira checagem real do concorrente), a mediana já é essa 1 execução
+// — não precisa de caso especial pra "é a primeira vez".
 const INTERVAL_RECHECK_SAMPLE_SIZE = 3;
 
-// Reavalia polling_interval_minutes contra a duração medida, subindo pro
-// próximo degrau seguro se precisar (nunca desce sozinho — ver
-// minimumSafeIntervalMinutes, packages/scraper/core/polling-interval.ts).
+// Reavalia polling_interval_minutes contra a duração medida — agora
+// BIDIRECIONAL (sobe E desce sozinho), decisão revista: a regra antiga
+// ("só sobe, nunca desce") existia porque um intervalo curto demais
+// arriscava duas checagens do mesmo concorrente se sobrepondo. Esse risco
+// não existe mais — o lock de check_started_at (Etapa do intervalo
+// adaptativo, Item 0) já impede sobreposição incondicionalmente; um
+// intervalo temporariamente curto demais no pior caso só faz a próxima
+// tentativa esperar a anterior liberar, não corrompe nada.
+//
+// Histerese pra não oscilar num concorrente na fronteira de um degrau:
+// sobe com SAFETY_MULTIPLIER (2x — reage rápido, segurança primeiro), só
+// desce quando a folga real já é maior (DECREASE_SAFETY_MULTIPLIER, 3x —
+// não só o mínimo). Os dois cálculos nunca conflitam entre si: como o
+// multiplicador de descida é maior, o degrau recomendado pra descida
+// nunca fica ABAIXO do degrau recomendado pra subida (função monótona no
+// multiplicador) — não existe cenário em que as duas condições abaixo
+// disparariam ao mesmo tempo.
+//
 // Chamada depois de TODA checagem bem-sucedida e limpa (ver call site em
 // checkCompetitor) — é a MESMA lógica pra "primeira checagem" e pra
-// "concorrente cresceu com o tempo", não dois mecanismos separados.
-// Melhor esforço: qualquer erro aqui é logado, nunca derruba a checagem
-// que já rodou com sucesso.
+// "concorrente mudou de velocidade com o tempo", não mecanismos
+// separados. Melhor esforço: qualquer erro aqui é logado, nunca derruba a
+// checagem que já rodou com sucesso.
 async function maybeAdjustPollingInterval(
   supabase: SupabaseClient,
   competitor: { id: string; account_id: string; name: string; polling_interval_minutes: number }
@@ -244,12 +259,21 @@ async function maybeAdjustPollingInterval(
 
   const durations = (recentRuns ?? []).map((r) => r.duration_ms as number);
   if (durations.length === 0) return;
-  const avgDurationMs = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+  const medianMs = medianDurationMs(durations);
 
-  const recommended = minimumSafeIntervalMinutes(avgDurationMs);
-  if (recommended.minutes <= competitor.polling_interval_minutes) return;
+  const increaseRecommendation = minimumSafeIntervalMinutes(medianMs, SAFETY_MULTIPLIER);
+  const decreaseRecommendation = minimumSafeIntervalMinutes(medianMs, DECREASE_SAFETY_MULTIPLIER);
 
   const oldMinutes = competitor.polling_interval_minutes;
+  let recommended: typeof increaseRecommendation;
+  if (increaseRecommendation.minutes > oldMinutes) {
+    recommended = increaseRecommendation;
+  } else if (decreaseRecommendation.minutes < oldMinutes) {
+    recommended = decreaseRecommendation;
+  } else {
+    return; // dentro da banda morta da histerese — não mexe
+  }
+
   const { error: updateError } = await supabase
     .from("competitors")
     .update({ polling_interval_minutes: recommended.minutes })
@@ -259,15 +283,18 @@ async function maybeAdjustPollingInterval(
     return;
   }
 
-  const avgMinutesLabel = (avgDurationMs / 60_000).toFixed(1);
-  const marginNote = recommended.marginGuaranteed
-    ? ""
-    : " Mesmo no maior intervalo disponível, a margem de segurança de 2x não está garantida — vale investigar por que este concorrente está tão lento.";
+  const medianMinutesLabel = (medianMs / 60_000).toFixed(1);
+  const isIncrease = recommended.minutes > oldMinutes;
+  const marginNote =
+    isIncrease && !recommended.marginGuaranteed
+      ? " Mesmo no maior intervalo disponível, a margem de segurança não está garantida — vale investigar por que este concorrente está tão lento."
+      : "";
 
   // audit_log inserido direto (não via lib/audit/log.ts) — packages/scraper
   // não importa de apps/web (sentido contrário ao resto do projeto), então
   // não reaproveita aquele helper; mesmo formato de linha, mesmo
-  // best-effort (nunca lança, só loga).
+  // best-effort (nunca lança, só loga). Grava nos dois sentidos — histórico
+  // completo, mesmo quando a notificação abaixo não dispara.
   const { error: auditError } = await supabase.from("audit_log").insert({
     actor_user_id: null,
     account_id: competitor.account_id,
@@ -276,19 +303,23 @@ async function maybeAdjustPollingInterval(
     target_id: competitor.id,
     details: {
       automatic: true,
+      direction: isIncrease ? "up" : "down",
       oldMinutes,
       newMinutes: recommended.minutes,
-      avgDurationMs: Math.round(avgDurationMs),
+      medianDurationMs: Math.round(medianMs),
       name: competitor.name,
     },
   });
   if (auditError) console.error(`Falha ao gravar audit_log (competitor_interval_changed automático): ${auditError.message}`);
 
+  // Notifica nos dois sentidos (decisão confirmada com o usuário) — subida
+  // e descida são igualmente dignas de nota pro Admin, mesmo a descida
+  // sendo "boa notícia" (monitoramento ficou mais frequente sozinho).
   await createNotification(supabase, {
     accountId: competitor.account_id,
     competitorId: competitor.id,
     title: `Intervalo de checagem ajustado automaticamente: ${competitor.name}`,
-    message: `As últimas checagens de "${competitor.name}" levaram em média ${avgMinutesLabel} min — o intervalo subiu de ${oldMinutes} para ${recommended.minutes} min pra manter uma margem de segurança.${marginNote}`,
+    message: `As últimas checagens de "${competitor.name}" tiveram mediana de ${medianMinutesLabel} min — o intervalo ${isIncrease ? "subiu" : "desceu"} de ${oldMinutes} para ${recommended.minutes} min${isIncrease ? " pra manter uma margem de segurança" : ", já que o site está respondendo mais rápido"}.${marginNote}`,
   });
 }
 

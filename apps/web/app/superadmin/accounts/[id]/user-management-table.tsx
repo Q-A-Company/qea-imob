@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import type { AccountUser } from "@/lib/users/get-account-users";
 import { ROLE_LABEL, type UserRole } from "@/lib/supabase/types";
 import { Avatar } from "@/app/(dashboard)/avatar";
+import { IconButton } from "@/app/(dashboard)/icon-button";
 
 interface ActionResult {
   error?: string;
@@ -79,15 +79,7 @@ export function DeleteUserButton({
   return (
     <>
       {compact ? (
-        <button
-          type="button"
-          onClick={openDialog}
-          aria-label="Excluir usuário"
-          title="Excluir"
-          className="rounded-md p-1.5 text-muted hover:bg-erro/10 hover:text-erro-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <IconButton icon={Trash2} label="Excluir usuário" variant="destructive" size="compact" onClick={openDialog} />
       ) : (
         <button
           type="button"
@@ -193,14 +185,7 @@ function UserRow({
 
         {manageable ? (
           <>
-            <Link
-              href={editHref}
-              aria-label="Editar usuário"
-              title="Editar"
-              className="rounded-md p-1.5 text-muted hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
-            >
-              <Pencil className="h-4 w-4" />
-            </Link>
+            <IconButton icon={Pencil} label="Editar usuário" size="compact" href={editHref} />
             <DeleteUserButton user={user} onDelete={onDelete} compact />
           </>
         ) : (

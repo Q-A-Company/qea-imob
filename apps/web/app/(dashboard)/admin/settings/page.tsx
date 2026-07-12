@@ -1,9 +1,11 @@
+import { AlertTriangle } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { getNotificationSettings } from "./get-notification-settings";
 import { NotificationChannelToggle } from "./notification-channel-toggle";
 import { PersonalEmailPreferenceToggle } from "./personal-email-preference-toggle";
 import { AppearanceThemeToggle } from "./appearance-theme-toggle";
 import { ClearHistoryButton } from "./clear-history-button";
+import { IconChip } from "../../icon-chip";
 
 export default async function SettingsPage() {
   const profile = await requireRole(["admin", "gerente"]);
@@ -57,7 +59,10 @@ export default async function SettingsPage() {
           `if` aqui é só pra não mostrar o botão pra quem não pode usá-lo. */}
       {profile.role === "admin" && (
         <section className="flex flex-col gap-2 rounded-lg border border-erro/30 bg-erro/5 p-4">
-          <h2 className="text-sm font-semibold text-foreground">Zona de perigo</h2>
+          <h2 className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
+            <IconChip icon={AlertTriangle} tone="erro" />
+            Zona de perigo
+          </h2>
           <p className="text-xs text-muted">
             Apaga permanentemente o histórico de mudanças (Feed e Relatórios) de todos os concorrentes desta conta. Imóveis
             capturados e configuração de extração não são afetados.

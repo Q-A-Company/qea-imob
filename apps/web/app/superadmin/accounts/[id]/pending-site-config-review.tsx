@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AlertTriangle } from "lucide-react";
 import { confirmSiteConfigActionForSuperAdmin, discardSiteConfigActionForSuperAdmin } from "@/lib/competitors/actions";
+import { IconChip } from "@/app/(dashboard)/icon-chip";
 import type { PendingSiteConfig } from "./get-pending-site-configs";
 
 const STRATEGY_LABEL: Record<PendingSiteConfig["strategy"], string> = {
@@ -57,7 +59,8 @@ export function PendingSiteConfigReview({ accountId, configs }: { accountId: str
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-erro/30 bg-erro/5 p-4">
-      <p className="text-sm font-medium text-erro-texto">
+      <p className="flex items-center gap-2.5 text-sm font-medium text-erro-texto">
+        <IconChip icon={AlertTriangle} tone="erro" />
         {items.length} {items.length === 1 ? "configuração de site aguardando revisão" : "configurações de site aguardando revisão"}
       </p>
       {error && (

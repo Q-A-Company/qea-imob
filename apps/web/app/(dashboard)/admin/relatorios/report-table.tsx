@@ -2,6 +2,7 @@ import Link from "next/link";
 import { colorForCompetitor } from "@/lib/categorical-colors";
 import { formatBRL } from "@/lib/format";
 import { PropertyReferenceLink } from "../../property-reference-link";
+import { Pagination } from "../../pagination";
 import { PAGE_SIZE, type ReportRow } from "./get-report-data";
 
 function formatDateTime(value: string) {
@@ -49,94 +50,126 @@ export function ReportTable({
           Nenhuma mudança encontrada com esses filtros.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-surface-border bg-surface print:!border-neutral-300 print:!bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-surface-border text-left text-xs text-muted print:!border-neutral-300 print:!text-black">
-                <th className="px-3 py-2 font-medium">Concorrente</th>
-                <th className="px-3 py-2 font-medium">Referência</th>
-                <th className="px-3 py-2 font-medium">Tipo</th>
-                <th className="px-3 py-2 font-medium">Preço antigo → novo</th>
-                <th className="px-3 py-2 font-medium">Data/hora</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b border-surface-border last:border-b-0 print:!border-neutral-200">
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="h-2 w-2 rounded-full print:hidden"
-                        style={{ backgroundColor: colorForCompetitor(row.competitorId) }}
-                        aria-hidden
-                      />
-                      <span className="font-mono text-xs font-semibold text-foreground print:!text-black">{row.competitorAbbreviation}</span>
-                      <span className="text-xs text-muted print:!text-black">{row.competitorName}</span>
+        <>
+          {/* Mobile (<sm): cards empilhados em vez de tabela — nome completo do
+              concorrente cortava/estourava a tela junto com as outras 4
+              colunas; o mesmo `<tr>` de 5 colunas não cabe legível numa tela
+              de telefone. Só a abreviação (mesmo badge usado em
+              competitors-list.tsx), sem o nome por extenso. Tabela tradicional
+              volta a partir de `sm` (tablet/desktop), onde há espaço de
+              sobra pras 5 colunas — inclusive impressão/PDF, que já assume
+              layout de tabela. */}
+          <ul className="flex flex-col gap-2 sm:hidden print:hidden">
+            {rows.map((row) => (
+              <li key={row.id} className="rounded-lg border border-surface-border bg-surface p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorForCompetitor(row.competitorId) }} aria-hidden />
+                    <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[11px] font-semibold text-signal-text">
+                      {row.competitorAbbreviation}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">
-                    <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
-                  </td>
-                  <td className="px-3 py-2 text-xs print:!text-black">
-                    {row.changeType === "price" ? (
-                      <span className="text-foreground print:!text-black">Preço</span>
-                    ) : row.changeType === "added" ? (
-                      <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
-                        Adicionado
-                      </span>
-                    ) : row.changeType === "removed" ? (
-                      <span className="rounded-full bg-erro/15 px-2 py-0.5 font-medium text-erro-texto print:!bg-transparent print:!text-black">
-                        Possiv. vendido
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
-                        Reapareceu
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs print:!text-black">
-                    {row.changeType === "price" ? (
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-muted line-through print:!text-black">{formatBRL(row.oldPrice)}</span>
-                        <span className="text-muted print:!text-black">→</span>
-                        <span className="font-semibold text-signal-text print:!text-black">{formatBRL(row.newPrice)}</span>
-                        <span className="text-muted print:!text-black">({formatDelta(row.oldPrice, row.newPrice)})</span>
-                      </span>
-                    ) : row.changeType === "added" ? (
-                      <span className="font-semibold text-sucesso-texto print:!text-black">{formatBRL(row.newPrice)}</span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted print:!text-black">{formatDateTime(row.detectedAt)}</td>
+                  </span>
+                  {row.changeType === "price" ? (
+                    <span className="text-xs text-foreground">Preço</span>
+                  ) : row.changeType === "added" ? (
+                    <span className="rounded-full bg-sucesso/15 px-2 py-0.5 text-xs font-medium text-sucesso-texto">Adicionado</span>
+                  ) : row.changeType === "removed" ? (
+                    <span className="rounded-full bg-erro/15 px-2 py-0.5 text-xs font-medium text-erro-texto">Possiv. vendido</span>
+                  ) : (
+                    <span className="rounded-full bg-sucesso/15 px-2 py-0.5 text-xs font-medium text-sucesso-texto">Reapareceu</span>
+                  )}
+                </div>
+                <div className="mb-1.5 font-mono text-xs text-foreground">
+                  <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  {row.changeType === "price" ? (
+                    <span className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+                      <span className="text-muted line-through">{formatBRL(row.oldPrice)}</span>
+                      <span className="text-muted">→</span>
+                      <span className="font-semibold text-signal-text">{formatBRL(row.newPrice)}</span>
+                      <span className="text-muted">({formatDelta(row.oldPrice, row.newPrice)})</span>
+                    </span>
+                  ) : row.changeType === "added" ? (
+                    <span className="font-mono text-xs font-semibold text-sucesso-texto">{formatBRL(row.newPrice)}</span>
+                  ) : (
+                    <span className="font-mono text-xs text-muted">—</span>
+                  )}
+                  <span className="shrink-0 text-[11px] text-muted">{formatDateTime(row.detectedAt)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-lg border border-surface-border bg-surface sm:block print:!block print:!border-neutral-300 print:!bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-surface-border text-left text-xs text-muted print:!border-neutral-300 print:!text-black">
+                  <th className="px-3 py-2 font-medium">Concorrente</th>
+                  <th className="px-3 py-2 font-medium">Referência</th>
+                  <th className="px-3 py-2 font-medium">Tipo</th>
+                  <th className="px-3 py-2 font-medium">Preço antigo → novo</th>
+                  <th className="px-3 py-2 font-medium">Data/hora</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b border-surface-border last:border-b-0 print:!border-neutral-200">
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 rounded-full print:hidden"
+                          style={{ backgroundColor: colorForCompetitor(row.competitorId) }}
+                          aria-hidden
+                        />
+                        <span className="font-mono text-xs font-semibold text-foreground print:!text-black">{row.competitorAbbreviation}</span>
+                        <span className="text-xs text-muted print:!text-black">{row.competitorName}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">
+                      <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
+                    </td>
+                    <td className="px-3 py-2 text-xs print:!text-black">
+                      {row.changeType === "price" ? (
+                        <span className="text-foreground print:!text-black">Preço</span>
+                      ) : row.changeType === "added" ? (
+                        <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
+                          Adicionado
+                        </span>
+                      ) : row.changeType === "removed" ? (
+                        <span className="rounded-full bg-erro/15 px-2 py-0.5 font-medium text-erro-texto print:!bg-transparent print:!text-black">
+                          Possiv. vendido
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-sucesso/15 px-2 py-0.5 font-medium text-sucesso-texto print:!bg-transparent print:!text-black">
+                          Reapareceu
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs print:!text-black">
+                      {row.changeType === "price" ? (
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-muted line-through print:!text-black">{formatBRL(row.oldPrice)}</span>
+                          <span className="text-muted print:!text-black">→</span>
+                          <span className="font-semibold text-signal-text print:!text-black">{formatBRL(row.newPrice)}</span>
+                          <span className="text-muted print:!text-black">({formatDelta(row.oldPrice, row.newPrice)})</span>
+                        </span>
+                      ) : row.changeType === "added" ? (
+                        <span className="font-semibold text-sucesso-texto print:!text-black">{formatBRL(row.newPrice)}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted print:!text-black">{formatDateTime(row.detectedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
-      {totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-4 print:hidden">
-          <Link
-            href={buildUrl({ page: String(Math.max(1, page - 1)) })}
-            aria-disabled={page <= 1}
-            className={`text-sm ${page <= 1 ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            ‹ Anterior
-          </Link>
-          <span className="text-sm text-muted">
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={buildUrl({ page: String(Math.min(totalPages, page + 1)) })}
-            aria-disabled={page >= totalPages}
-            className={`text-sm ${page >= totalPages ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            Próxima ›
-          </Link>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildUrl={(p) => buildUrl({ page: String(p) })} className="mt-3 print:hidden" />
     </div>
   );
 }

@@ -1,7 +1,18 @@
+import { Activity, Building2, Home } from "lucide-react";
 import { colorForCompetitor } from "@/lib/categorical-colors";
 import { Card, CardHeader } from "../../card";
 import { RankingBars } from "../../mini-charts";
+import { KpiCard } from "../kpi-card";
 import type { ReportIndicators } from "./get-report-data";
+
+// previous=0 → percentual sem sentido (mesmo princípio de
+// admin/dashboard-client.tsx). previousPeriod null → sem from/to definidos,
+// sem período anterior bem definido (decisão confirmada com o usuário) —
+// os dois casos resultam em `undefined`/omitir o indicador.
+function computePercentChange(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
 
 // Bloco de indicadores de Relatórios — reage aos MESMOS filtros que a
 // tabela abaixo (indicators já vem calculado sobre o conjunto filtrado
@@ -27,16 +38,26 @@ export function ReportCharts({ indicators }: { indicators: ReportIndicators }) {
     // cai pra 1 coluna só (empilha) — inevitável pra continuar responsivo,
     // não dá pra manter 3 blocos lado a lado num celular.
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-      <Card className="p-4">
-        <p className="text-xs text-muted">Mudanças no período</p>
-        <p className="mt-1 font-mono text-2xl font-semibold text-foreground">{indicators.totalChanges}</p>
-      </Card>
-      <Card className="p-4">
-        <p className="text-xs text-muted">Imóveis alterados</p>
-        <p className="mt-1 font-mono text-2xl font-semibold text-foreground">{indicators.uniquePropertiesChanged}</p>
-      </Card>
+      <KpiCard
+        icon={Activity}
+        label="Mudanças no período"
+        value={indicators.totalChanges}
+        percentChange={
+          indicators.previousPeriod && computePercentChange(indicators.totalChanges, indicators.previousPeriod.totalChanges)
+        }
+      />
+      <KpiCard
+        icon={Home}
+        label="Imóveis alterados"
+        value={indicators.uniquePropertiesChanged}
+        delay={0.08}
+        percentChange={
+          indicators.previousPeriod &&
+          computePercentChange(indicators.uniquePropertiesChanged, indicators.previousPeriod.uniquePropertiesChanged)
+        }
+      />
       <Card className="sm:col-span-2">
-        <CardHeader title="Alterações por concorrente" />
+        <CardHeader icon={Building2} title="Alterações por concorrente" />
         <RankingBars
           entries={indicators.byCompetitor.map((c) => ({
             label: c.abbreviation,

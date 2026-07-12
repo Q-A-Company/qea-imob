@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatDuration } from "@/lib/format";
 import { getRunChangesByRunId } from "@/lib/scraper-runs/get-run-changes";
 import { ExpandableRow } from "../../expandable-row";
 import { PropertyChangeRow } from "../../property-change-row";
+import { Pagination } from "../../pagination";
 
 const RUN_TYPE_LABEL: Record<string, string> = {
   checagem: "Checagem",
@@ -112,7 +112,14 @@ export async function HistoryContent({
               <ExpandableRow
                 key={run.id}
                 summary={
-                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  // Empilhado no mobile (nome/tipo, depois imóveis/mudanças,
+                  // depois status/duração/data numa linha só com
+                  // justify-between) — lado a lado só a partir de `sm`. Antes
+                  // era um único `flex flex-wrap`: quando o bloco da direita
+                  // não cabia ao lado do nome, ele quebrava pra própria linha
+                  // mas ficava alinhado à esquerda (largura do conteúdo, não
+                  // da linha), sem alinhamento nenhum com o resto do card.
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
                         {competitorNameById.get(run.competitor_id) ?? "Concorrente removido"}
@@ -124,7 +131,7 @@ export async function HistoryContent({
                         {!run.success && run.error_message ? ` · ${run.error_message}` : ""}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3 text-xs text-muted">
+                    <div className="flex items-center justify-between gap-3 text-xs text-muted sm:shrink-0 sm:justify-end">
                       <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.className}`}>{status.label}</span>
                       <span>{formatDuration(run.duration_ms)}</span>
                       <span className="text-right">
@@ -151,27 +158,7 @@ export async function HistoryContent({
         </ul>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            href={buildUrl(Math.max(1, page - 1))}
-            aria-disabled={page <= 1}
-            className={`text-sm ${page <= 1 ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            ‹ Anterior
-          </Link>
-          <span className="text-sm text-muted">
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={buildUrl(Math.min(totalPages, page + 1))}
-            aria-disabled={page >= totalPages}
-            className={`text-sm ${page >= totalPages ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            Próxima ›
-          </Link>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildUrl={buildUrl} />
     </div>
   );
 }

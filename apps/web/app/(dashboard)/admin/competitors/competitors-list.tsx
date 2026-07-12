@@ -82,13 +82,18 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
   return (
     <div className="flex flex-col gap-3">
       {competitors.length > 4 && (
-        <div className="flex gap-1 border-b border-surface-border">
+        // overflow-x-auto: com 5 abas ("Todos (N)"..."Arquivados (N)") em
+        // texto normal, a soma das larguras estoura uma tela de telefone —
+        // rola horizontalmente em vez de cortar/quebrar as abas.
+        // whitespace-nowrap + shrink-0 em cada aba evita que o texto quebre
+        // linha ou que as abas encolham de forma desigual durante o scroll.
+        <div className="flex gap-1 overflow-x-auto border-b border-surface-border">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setFilter(tab.key)}
-              className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
                 filter === tab.key ? "border-signal text-signal-text" : "border-transparent text-muted hover:text-foreground"
               }`}
             >
@@ -105,7 +110,15 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
           {filtered.map((competitor) => {
             const isArchived = competitor.status === "arquivado";
             return (
-              <li key={competitor.id} className="flex items-center justify-between gap-4 px-4 py-3.5">
+              // Empilhado no mobile (nome no topo, seletor de intervalo em
+              // largura total, depois os 3 botões de ação lado a lado num
+              // grid de 3 colunas que cabe na tela) — lado a lado numa linha
+              // só a partir de `sm`, igual ao layout original. Antes era um
+              // único `flex items-center justify-between` sem wrap: o bloco
+              // de ações (seletor + 3 botões, `shrink-0`) não tinha pra onde
+              // encolher/quebrar e estourava a largura da tela num telefone
+              // real ("Verific..." cortado na borda).
+              <li key={competitor.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                     <span className="shrink-0 rounded bg-background px-1.5 py-0.5 font-mono text-[11px] font-semibold text-signal-text">
@@ -120,28 +133,37 @@ export function CompetitorsList({ competitors }: { competitors: CompetitorRow[] 
                     >
                       {STATUS_LABEL[competitor.status] ?? competitor.status}
                     </span>
+                    {/* Resquício do radar aposentado (ver globals.css) — só
+                        um ponto que pisca 2x na montagem, não um loop
+                        permanente; só faz sentido pra quem está sendo
+                        vigiado de verdade agora (ativo + já teve check). */}
+                    {competitor.status === "ativo" && competitor.lastCheckedAt && <span className="check-pulse" aria-hidden />}
                     Último check: {formatDateTime(competitor.lastCheckedAt)}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-start gap-2">
-                  {isArchived ? (
-                    <>
-                      <ReactivateButton competitorId={competitor.id} />
-                      <DeleteCompetitorButton competitorId={competitor.id} competitorName={competitor.name} />
-                    </>
-                  ) : (
-                    <>
-                      <IntervalSelect
-                        competitorId={competitor.id}
-                        minutes={competitor.pollingIntervalMinutes}
-                        minMinutes={competitor.minPollingIntervalMinutes}
-                      />
+                {isArchived ? (
+                  <div className="flex items-center gap-2 sm:shrink-0">
+                    <ReactivateButton competitorId={competitor.id} />
+                    <DeleteCompetitorButton competitorId={competitor.id} competitorName={competitor.name} />
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row sm:items-start">
+                    <IntervalSelect
+                      competitorId={competitor.id}
+                      minutes={competitor.pollingIntervalMinutes}
+                      minMinutes={competitor.minPollingIntervalMinutes}
+                    />
+                    {/* sm:contents: no mobile é um grid próprio (3 colunas,
+                        lado a lado, sem overflow); a partir de `sm` o wrapper
+                        "desaparece" do layout e os 3 botões voltam a fluir
+                        direto na linha flex do pai, exatamente como antes. */}
+                    <div className="grid grid-cols-3 gap-2 sm:contents">
                       <StatusToggle competitorId={competitor.id} status={competitor.status} />
                       <CheckNowButton competitorId={competitor.id} />
                       <ArchiveButton competitorId={competitor.id} />
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}

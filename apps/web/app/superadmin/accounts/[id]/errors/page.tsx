@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { formatDuration } from "@/lib/format";
 import { getRunChangesByRunId } from "@/lib/scraper-runs/get-run-changes";
 import { ExpandableRow } from "@/app/(dashboard)/expandable-row";
 import { PropertyChangeRow } from "@/app/(dashboard)/property-change-row";
+import { Pagination } from "@/app/(dashboard)/pagination";
 import { getAccountErrorRuns, ERROR_RUNS_PAGE_SIZE } from "../get-account-error-runs";
 
 const RUN_TYPE_LABEL: Record<string, string> = {
@@ -95,27 +95,7 @@ export default async function AccountErrorsPage({
         </ul>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Link
-            href={buildUrl(Math.max(1, page - 1))}
-            aria-disabled={page <= 1}
-            className={`text-sm ${page <= 1 ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            ‹ Anterior
-          </Link>
-          <span className="text-sm text-muted">
-            Página {page} de {totalPages}
-          </span>
-          <Link
-            href={buildUrl(Math.min(totalPages, page + 1))}
-            aria-disabled={page >= totalPages}
-            className={`text-sm ${page >= totalPages ? "pointer-events-none text-muted/40" : "text-muted hover:underline"}`}
-          >
-            Próxima ›
-          </Link>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildUrl={buildUrl} />
     </div>
   );
 }

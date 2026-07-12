@@ -22,17 +22,17 @@ export function ArchiveButton({ competitorId }: { competitorId: string }) {
   }
 
   return (
-    <div className="flex flex-col items-end gap-0.5">
+    <div className="flex flex-col items-stretch gap-0.5 sm:items-end">
       <button
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-md border border-surface-border px-3 py-1.5 text-sm text-muted hover:bg-background hover:text-foreground disabled:opacity-60"
+        className="w-full rounded-md border border-surface-border px-2 py-1.5 text-xs text-muted hover:bg-background hover:text-foreground disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm"
       >
         {isPending ? "Aguarde..." : "Arquivar"}
       </button>
       {error && (
-        <p className="max-w-40 text-right text-[11px] text-erro-texto" role="alert">
+        <p className="max-w-full text-center text-[11px] text-erro-texto sm:max-w-40 sm:text-right" role="alert">
           {error}
         </p>
       )}

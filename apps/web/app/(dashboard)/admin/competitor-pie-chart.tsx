@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
+import { PieChart } from "lucide-react";
 import { colorForCompetitor } from "@/lib/categorical-colors";
-import { InfoTooltip } from "../info-tooltip";
+import { IconChip } from "../icon-chip";
 import type { CompetitorBreakdownEntry } from "./get-dashboard-data";
 
 type Window = "24h" | "7d" | "30d";
@@ -46,9 +47,9 @@ export function CompetitorPieChart({
   return (
     <div className="flex h-full flex-col rounded-lg border border-surface-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted">
+        <h3 className="flex items-center gap-2.5 text-sm font-medium text-muted">
+          <IconChip icon={PieChart} />
           Mudanças por concorrente
-          <InfoTooltip text="Distribuição das mudanças detectadas entre os concorrentes, na janela de tempo selecionada." />
         </h3>
         <div className="flex shrink-0 gap-1 rounded-md border border-surface-border p-0.5">
           {WINDOWS.map((w) => (

@@ -26,24 +26,24 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
   const [state, formAction, pending] = useActionState(checkCompetitorNowAction, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col items-end gap-1">
+    <form action={formAction} className="flex flex-col items-stretch gap-1 sm:items-end">
       <input type="hidden" name="competitorId" value={competitorId} />
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-60 sm:w-auto sm:px-3 sm:text-sm dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
       >
         {pending ? "Verificando..." : "Verificar agora"}
       </button>
 
       {state.error && (
-        <p className="max-w-64 text-right text-xs text-erro-texto" role="alert">
+        <p className="max-w-full text-center text-xs text-erro-texto sm:max-w-64 sm:text-right" role="alert">
           {state.error}
         </p>
       )}
 
       {state.result && state.result.skippedAlreadyRunning && (
-        <p className="max-w-64 text-right text-xs text-muted">
+        <p className="max-w-full text-center text-xs text-muted sm:max-w-64 sm:text-right">
           Já existe uma checagem em andamento para este concorrente (provavelmente o scheduler automático) — aguarde ela
           terminar.
         </p>
@@ -51,7 +51,7 @@ export function CheckNowButton({ competitorId }: { competitorId: string }) {
 
       {state.result && !state.result.skippedAlreadyRunning && (
         <p
-          className={`max-w-64 text-right text-xs ${
+          className={`max-w-full text-center text-xs sm:max-w-64 sm:text-right ${
             state.result.success && !state.result.stoppedEarlyDueToError
               ? "text-sucesso-texto"
               : "text-erro-texto"
