@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { PropertyChangeType } from "@/lib/supabase/types";
+import type { PropertyAttributes } from "@/app/(dashboard)/property-reference-link";
 
 export interface FeedItem {
   id: string;
@@ -9,6 +10,8 @@ export interface FeedItem {
   competitorAbbreviation: string;
   referenceCode: string | null;
   url: string;
+  status: "ativo" | "possivelmente_vendido";
+  attributes: PropertyAttributes | null;
   changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -39,6 +42,8 @@ export interface VolatileProperty {
   abbreviation: string;
   referenceCode: string | null;
   url: string;
+  status: "ativo" | "possivelmente_vendido";
+  attributes: PropertyAttributes | null;
   count: number;
 }
 
@@ -75,6 +80,8 @@ interface PropertyRef {
   external_id: string;
   reference_code: string | null;
   url: string;
+  status: "ativo" | "possivelmente_vendido";
+  attributes: PropertyAttributes | null;
   competitor_id: string;
 }
 
@@ -104,7 +111,7 @@ async function fetchAllProperties(
   for (;;) {
     const { data, error } = await supabase
       .from("properties")
-      .select("id, external_id, reference_code, url, competitor_id")
+      .select("id, external_id, reference_code, url, status, attributes, competitor_id")
       .in("competitor_id", competitorIds)
       .range(offset, offset + FETCH_PAGE_SIZE - 1);
     if (error) throw new Error(`Falha ao buscar imóveis: ${error.message}`);
@@ -262,6 +269,8 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
           abbreviation: competitorMeta.get(competitorId)?.abbreviation ?? "???",
           referenceCode: property.reference_code,
           url: property.url,
+          status: property.status,
+          attributes: property.attributes,
           count: 1,
         });
 
@@ -273,6 +282,8 @@ export async function getDashboardData(accountId: string): Promise<DashboardData
           competitorAbbreviation: competitorMeta.get(competitorId)?.abbreviation ?? "???",
           referenceCode: property.reference_code,
           url: property.url,
+          status: property.status,
+          attributes: property.attributes,
           changeType: change.change_type,
           oldPrice: change.old_price,
           newPrice: change.new_price,

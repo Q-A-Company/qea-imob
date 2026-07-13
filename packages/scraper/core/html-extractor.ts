@@ -84,6 +84,19 @@ export function extractFromHtml(
     // não bate neste card específico, readField já devolve null sozinho.
     const rawReferenceCode = config.reference_code ? readField($card, $, config.reference_code) : null;
 
+    // attributes — camada 3 de identificação de imóvel removido sem
+    // reference_code (ver text-utils.ts extractLabelFromUrl pra camada 1;
+    // camada 2 de foto foi removida — decisão do usuário de não guardar
+    // mais imagem nenhuma). `config.attributes` pode ser undefined pra
+    // site_configs gravados antes dessa mudança (a chave nem existe no
+    // jsonb) — daí o `?.` em vez de acesso direto, mesmo motivo de
+    // optional() no schema (site-config-schema.ts).
+    const attributesConfig = config.attributes;
+    const rawBairro = attributesConfig?.bairro ? readField($card, $, attributesConfig.bairro) : null;
+    const rawQuartos = attributesConfig?.quartos ? readField($card, $, attributesConfig.quartos) : null;
+    const rawArea = attributesConfig?.area ? readField($card, $, attributesConfig.area) : null;
+    const attributes = rawBairro || rawQuartos || rawArea ? { bairro: rawBairro, quartos: rawQuartos, area: rawArea } : null;
+
     const isSobConsulta =
       rawPrice !== null &&
       config.price.sob_consulta_markers.some((marker) => rawPrice.toLowerCase().includes(marker.toLowerCase()));
@@ -106,6 +119,7 @@ export function extractFromHtml(
       price,
       price_status: priceStatus,
       url: resolveUrl(rawUrl, listingUrl),
+      attributes,
     });
   });
 

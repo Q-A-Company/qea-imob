@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { JsonApiSiteConfig } from "./site-config-schema.js";
 import type { ExtractedProperty } from "../core/types.js";
+import { isAllowedByRobots } from "../core/robots.js";
 
 const USER_AGENT = "Q&A Imob Bot/1.0 (contato@qeacompany.com.br)";
 const MODEL = "claude-sonnet-5";
@@ -168,6 +169,13 @@ async function probeCandidate(pathOrUrl: string, listingUrl: string): Promise<Pr
   } catch {
     return null;
   }
+
+  // robots.txt bloqueando este candidato específico é tratado igual a
+  // qualquer outro candidato que não bate (retorna null, o chamador tenta
+  // o próximo) — não interrompe a detecção inteira, só descarta essa
+  // possibilidade sem nunca chegar a fazer uma requisição de dado real
+  // pra ela.
+  if (!(await isAllowedByRobots(base.toString()))) return null;
 
   const listing = new URL(listingUrl);
   const attempts: URL[] = [new URL(base)];

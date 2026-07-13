@@ -8,4 +8,10 @@ export interface ExtractedProperty {
   price: number | null;
   price_status: "valor" | "sob_consulta";
   url: string;
+  // Camada 3 de identificação de imóvel removido sem reference_code —
+  // melhor esforço, null quando o site não expõe o dado (não é um erro, é
+  // esperado pra boa parte dos sites). Nunca usado em identidade/
+  // comparação, só exibição — mesmo status de reference_code. (Camada 2,
+  // foto, foi removida — decisão do usuário de não guardar mais imagem.)
+  attributes: { bairro: string | null; quartos: string | null; area: string | null } | null;
 }

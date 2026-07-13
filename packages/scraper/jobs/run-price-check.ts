@@ -18,6 +18,11 @@ export interface RunPriceCheckResult {
   // (scheduler, Etapa 5) deve registrar isso em scraper_runs como falha
   // parcial, não sucesso pleno, mesmo que properties não esteja vazio.
   stoppedEarlyDueToError: boolean;
+  // Motivo real da falha (status HTTP ou mensagem de exceção), quando
+  // conhecido — null se stoppedEarlyDueToError for false, ou se a falha
+  // veio de uma exceção que já propaga sozinha pro chamador (ver
+  // checkCompetitor: falha na 1ª página html_css não passa por aqui).
+  stoppedEarlyErrorReason: string | null;
 }
 
 // Etapa 4: extração determinística de rotina — usa a site_config JÁ SALVA
@@ -39,6 +44,7 @@ export async function runPriceCheck(params: {
       cardsWithoutPrice: 0,
       cardsWithoutExternalId: result.itemsSkippedMissingField,
       stoppedEarlyDueToError: result.stoppedEarlyDueToError,
+      stoppedEarlyErrorReason: result.stoppedEarlyErrorReason,
     };
   }
 
@@ -56,5 +62,12 @@ export async function runPriceCheck(params: {
     cardsWithoutPrice: result.cardsWithoutPrice,
     cardsWithoutExternalId: result.cardsWithoutExternalId,
     stoppedEarlyDueToError: result.stoppedReason === "fetch_failed",
+    // html-paginator.ts (página 2+) tem o MESMO gap que existia em
+    // json-api-extractor.ts antes desta correção — fetchHtmlWithRetry
+    // também descarta o motivo real da falha, só devolve html: null. Não
+    // corrigido aqui (fora do escopo pedido); falha na 1ª página nem passa
+    // por este branch (fetchListingHtml lança direto, propaga com a
+    // mensagem real via o catch em checkCompetitor).
+    stoppedEarlyErrorReason: null,
   };
 }

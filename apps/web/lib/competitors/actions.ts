@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
+import { RobotsDisallowedError } from "scraper/core/robots";
 import { minimumSafeIntervalMinutes } from "scraper/core/polling-interval";
 import { ALLOWED_POLLING_INTERVALS } from "./constants";
 import { normalizeListingUrl } from "./normalize-url";
@@ -246,6 +247,31 @@ export async function registerCompetitorAction(
       },
     };
   } catch (err) {
+    // robots.txt proibindo explicitamente este caminho é tratado diferente
+    // de qualquer outra falha de aprendizado: não é uma falha técnica
+    // retentável (site fora do ar, seletor não identificado) — é o próprio
+    // site dizendo que não quer coleta automatizada ali. Por isso desfaz o
+    // cadastro (diferente do catch abaixo, que mantém o concorrente criado
+    // pro Admin recalibrar depois) e devolve um erro específico, não o
+    // "learningError" genérico — não faz sentido oferecer "rode a
+    // recalibração manualmente", já que ela ia bater no mesmo bloqueio.
+    if (err instanceof RobotsDisallowedError) {
+      await supabase.from("competitors").delete().eq("id", competitor.id);
+      await logAuditEvent({
+        actorUserId: profile.id,
+        accountId: profile.account_id,
+        actionType: "competitor_registration_blocked_by_robots",
+        targetType: "competitor",
+        targetId: competitor.id,
+        details: { name, abbreviation, listingUrl },
+      });
+      revalidatePath("/admin/competitors");
+      const target = new URL(listingUrl);
+      return {
+        error: `Cadastro bloqueado: o robots.txt de ${target.origin} proíbe explicitamente a coleta em "${target.pathname}". Não é possível monitorar este concorrente sem violar as regras de automação que o próprio site publica.`,
+      };
+    }
+
     // Concorrente já existe (commit acima) — só o aprendizado falhou.
     // Não desfaz o cadastro: o Admin pode tentar recalibrar depois.
     return {

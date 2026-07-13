@@ -464,3 +464,115 @@ export async function removeUserAvatarAction(accountId: string, userId: string):
   revalidatePath(`/superadmin/accounts/${accountId}/users`);
   return { success: true };
 }
+
+export interface ClearErrorRunsState {
+  error?: string;
+  success?: boolean;
+  deletedCount?: number;
+}
+
+// Apaga permanentemente as linhas de scraper_runs que aparecem no
+// Relatório de Erros desta conta (mesmo filtro de
+// get-account-error-runs.ts: success=false OU
+// stopped_early_due_to_error=true) — não toca em execuções bem-sucedidas,
+// essas continuam aparecendo no Histórico normalmente. Seguro quanto a
+// integridade: property_changes.scraper_run_id é "on delete set null"
+// (migration 0016) — nenhuma mudança de preço/disponibilidade já
+// detectada é perdida, só o vínculo com QUAL execução a detectou.
+// Decisão confirmada com o usuário: apaga de verdade, não só esconde/
+// marca como dispensado.
+export async function clearAccountErrorRunsAction(accountId: string): Promise<ClearErrorRunsState> {
+  const viewer = await requireRole("superadmin");
+
+  // Service role — mesmo raciocínio já documentado em
+  // admin/settings/actions.ts (clearAccountHistoryAction): a autorização de
+  // verdade é o requireRole acima, não depende de nenhuma política de RLS
+  // específica pra este caso.
+  const supabase = createServiceClient();
+
+  const { data: competitors, error: competitorsError } = await supabase
+    .from("competitors")
+    .select("id")
+    .eq("account_id", accountId);
+  if (competitorsError) return { error: `Falha ao buscar concorrentes: ${competitorsError.message}` };
+  const competitorIds = (competitors ?? []).map((c) => c.id);
+  if (competitorIds.length === 0) return { success: true, deletedCount: 0 };
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("scraper_runs")
+    .delete()
+    .in("competitor_id", competitorIds)
+    .or("success.eq.false,stopped_early_due_to_error.eq.true")
+    .select("id");
+  if (deleteError) return { error: `Falha ao apagar execuções com erro: ${deleteError.message}` };
+
+  const deletedCount = deleted?.length ?? 0;
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "error_runs_cleared",
+    targetType: "account",
+    targetId: accountId,
+    details: { deletedCount, competitorsAffected: competitorIds.length },
+  });
+
+  revalidatePath(`/superadmin/accounts/${accountId}/errors`);
+  return { success: true, deletedCount };
+}
+
+// Zona de perigo — apaga a conta inteira e TUDO que depende dela,
+// permanentemente. `accounts.id` é referenciado com "on delete cascade"
+// por profiles, competitors, notification_settings, notifications,
+// restricted_leads, email_digest_log, login_audit_log e audit_log —
+// e a cadeia continua sozinha a partir de competitors (site_configs,
+// properties, scraper_runs, e property_changes via properties), todos
+// "on delete cascade" também (ver supabase/migrations/0001_init.sql). Um
+// único DELETE em accounts já limpa tudo isso.
+//
+// MAS isso não apaga os usuários do Supabase Auth (auth.users) — a FK de
+// profiles.account_id cascade A PARTIR de accounts, só que profiles.id
+// referencia auth.users no sentido INVERSO; apagar accounts nunca chega
+// lá. Sem tratar isso à parte, o auth.users ficaria órfão (sem profile,
+// mas ainda existindo, tecnicamente capaz de tentar logar). Por isso cada
+// usuário é apagado primeiro via auth.admin.deleteUser (que já cascade-
+// apaga o profile dele, mesmo comportamento de deleteUserAction) — só
+// depois disso a conta em si é apagada.
+//
+// Auditoria PRECISA ser gravada ANTES do delete: audit_log.account_id tem
+// FK pra accounts.id — gravar depois de apagar a conta violaria a
+// constraint (o registro não teria mais o que referenciar).
+export async function deleteAccountAction(accountId: string): Promise<ActionState> {
+  const viewer = await requireRole("superadmin");
+  const supabase = createServiceClient();
+
+  const { data: account } = await supabase.from("accounts").select("id, name").eq("id", accountId).maybeSingle();
+  if (!account) return { error: "Conta não encontrada" };
+
+  const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id").eq("account_id", accountId);
+  if (profilesError) return { error: `Falha ao buscar usuários da conta: ${profilesError.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "account_deleted",
+    targetType: "account",
+    targetId: accountId,
+    details: { name: account.name, usersDeleted: profiles?.length ?? 0 },
+  });
+
+  for (const profile of profiles ?? []) {
+    const { error: deleteUserError } = await supabase.auth.admin.deleteUser(profile.id);
+    if (deleteUserError) {
+      return {
+        error: `Falha ao apagar usuário ${profile.id} durante a exclusão da conta: ${deleteUserError.message}. A conta NÃO foi apagada — corrija o problema e tente de novo.`,
+      };
+    }
+  }
+
+  const { error: deleteAccountError } = await supabase.from("accounts").delete().eq("id", accountId);
+  if (deleteAccountError) return { error: `Falha ao apagar conta: ${deleteAccountError.message}` };
+
+  revalidatePath("/superadmin");
+  return { success: true };
+}

@@ -1,11 +1,14 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { PropertyChangeType } from "@/lib/supabase/types";
+import type { PropertyAttributes } from "@/app/(dashboard)/property-reference-link";
 
 export interface RunChangeDetail {
   id: string;
   referenceCode: string | null;
   url: string | null;
+  status: "ativo" | "possivelmente_vendido" | null;
+  attributes: PropertyAttributes | null;
   changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -77,9 +80,18 @@ export async function getRunChangesByRunId(runIds: string[]): Promise<Map<string
   if (changes.length === 0) return result;
 
   const propertyIds = [...new Set(changes.map((c) => c.property_id))];
-  const properties: { id: string; reference_code: string | null; url: string }[] = [];
+  const properties: {
+    id: string;
+    reference_code: string | null;
+    url: string;
+    status: "ativo" | "possivelmente_vendido";
+    attributes: PropertyAttributes | null;
+  }[] = [];
   for (const idsChunk of chunk(propertyIds, ID_CHUNK_SIZE)) {
-    const { data, error: propertiesError } = await supabase.from("properties").select("id, reference_code, url").in("id", idsChunk);
+    const { data, error: propertiesError } = await supabase
+      .from("properties")
+      .select("id, reference_code, url, status, attributes")
+      .in("id", idsChunk);
     if (propertiesError) throw new Error(`Falha ao buscar imóveis das mudanças: ${propertiesError.message}`);
     properties.push(...(data ?? []));
   }
@@ -93,6 +105,8 @@ export async function getRunChangesByRunId(runIds: string[]): Promise<Map<string
       id: change.id,
       referenceCode: property?.reference_code ?? null,
       url: property?.url ?? null,
+      status: property?.status ?? null,
+      attributes: property?.attributes ?? null,
       changeType: change.change_type,
       oldPrice: change.old_price,
       newPrice: change.new_price,

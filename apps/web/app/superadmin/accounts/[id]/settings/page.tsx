@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { getAccountSettingsData } from "../get-account-settings-data";
 import { getPendingSiteConfigs } from "../get-pending-site-configs";
 import { AccountStatusToggle } from "../account-status-toggle";
+import { DeleteAccountButton } from "../delete-account-button";
 import { AccountNameEditor } from "../account-name-editor";
 import { AccountNotesEditor } from "../account-notes-editor";
 import { PendingSiteConfigReview } from "../pending-site-config-review";
@@ -64,6 +65,15 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
         ) : (
           <p className="text-sm text-muted">Nenhuma configuração de notificação definida para esta conta ainda.</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-lg border border-erro/30 bg-erro/5 p-4">
+        <p className="text-sm font-medium text-foreground">Zona de perigo</p>
+        <p className="text-sm text-muted">
+          Desativar (acima) impede login e checagens, mas mantém tudo — reversível a qualquer momento. Apagar é permanente e
+          remove a conta e todos os dados dela por completo.
+        </p>
+        <DeleteAccountButton accountId={data.id} accountName={data.name} />
       </div>
     </div>
   );

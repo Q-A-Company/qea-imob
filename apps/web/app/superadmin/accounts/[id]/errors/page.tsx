@@ -5,6 +5,7 @@ import { ExpandableRow } from "@/app/(dashboard)/expandable-row";
 import { PropertyChangeRow } from "@/app/(dashboard)/property-change-row";
 import { Pagination } from "@/app/(dashboard)/pagination";
 import { getAccountErrorRuns, ERROR_RUNS_PAGE_SIZE } from "../get-account-error-runs";
+import { ClearErrorRunsButton } from "./clear-error-runs-button";
 
 const RUN_TYPE_LABEL: Record<string, string> = {
   checagem: "Checagem",
@@ -37,11 +38,14 @@ export default async function AccountErrorsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">Relatório de erros</h1>
-        <p className="mt-1 text-sm text-muted">
-          Execuções que falharam ou pararam cedo por erro — para diagnosticar um concorrente sem abrir o Supabase direto.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">Relatório de erros</h1>
+          <p className="mt-1 text-sm text-muted">
+            Execuções que falharam ou pararam cedo por erro — para diagnosticar um concorrente sem abrir o Supabase direto.
+          </p>
+        </div>
+        {totalCount > 0 && <ClearErrorRunsButton accountId={id} />}
       </div>
 
       {runs.length === 0 && <p className="text-sm text-muted">Nenhuma execução com erro registrada para esta conta.</p>}

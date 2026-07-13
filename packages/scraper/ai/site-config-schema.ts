@@ -43,6 +43,22 @@ const Pagination = z.object({
     .describe("Seletor CSS do link/botão 'próxima página' quando type='next_link'; null caso contrário"),
 });
 
+// Atributos estruturados opcionais do card — melhor esforço, cada um
+// nullable independente (muitos sites mostram só bairro, alguns mostram os
+// três, outros nenhum). Não confundir com external_id/reference_code
+// (identidade do imóvel): isso é só contexto de EXIBIÇÃO, usado quando não
+// há reference_code legível pra ajudar a reconhecer um imóvel já removido
+// do site (ver text-utils.ts extractLabelFromUrl, camada complementar que
+// não depende de seletor nenhum). Extraído como TEXTO livre (não número
+// parseado) — evita erro de parsing entre formatos variados (ex: "120m²"
+// vs "120 m²" vs "área útil: 120m²"), quem exibe já decide o que fazer com
+// o texto bruto.
+const StructuredAttributes = z.object({
+  bairro: FieldSelector.nullable().describe("Seletor pro bairro/localização do imóvel, se aparecer no card. null se não houver."),
+  quartos: FieldSelector.nullable().describe("Seletor pro número de quartos, se aparecer no card. null se não houver."),
+  area: FieldSelector.nullable().describe("Seletor pra área do imóvel (m² útil, terreno, etc.), se aparecer no card. null se não houver."),
+});
+
 export const HtmlCssSiteConfig = z.object({
   strategy: z.literal("html_css"),
   card_selector: z
@@ -56,6 +72,12 @@ export const HtmlCssSiteConfig = z.object({
   ),
   price: PriceSelector.describe("Preço do imóvel"),
   property_url: FieldSelector.describe("Link para a página individual do imóvel (attribute deve ser 'href')"),
+  // .optional() além de .nullable() — não é só capricho de tipo:
+  // site_configs GRAVADOS ANTES desta mudança não têm essa chave no jsonb
+  // de verdade (não passam por HtmlCssSiteConfig.parse() de novo na
+  // leitura, só o tipo TS confia na forma) — undefined é um estado real em
+  // produção pra config antiga, não só teórico.
+  attributes: StructuredAttributes.optional(),
   pagination: Pagination,
   total_listings_hint: z
     .number()
@@ -130,6 +152,17 @@ export const JsonApiSiteConfig = z.object({
     .string()
     .nullable()
     .describe("Campo booleano do item que indica preço indisponível/oculto (ex: 'ocultarValor'); null se não existir"),
+  // .optional() pelo mesmo motivo do html_css acima — configs json_api
+  // existentes (todos construídos à mão até hoje, ver README do pacote) não
+  // têm essa chave.
+  attributes_fields: z
+    .object({
+      bairro_field: z.string().nullable().describe("Campo do item com o bairro/localização, se existir. null se não houver."),
+      quartos_field: z.string().nullable().describe("Campo do item com o número de quartos, se existir. null se não houver."),
+      area_field: z.string().nullable().describe("Campo do item com a área (m² útil, terreno, etc.), se existir. null se não houver."),
+    })
+    .optional()
+    .describe("Atributos estruturados opcionais — mesmo propósito de StructuredAttributes em html_css, ver comentário lá."),
   property_url_field: z.string().describe("Campo do item com o slug/caminho relativo da página do imóvel"),
   property_url_base: z
     .string()

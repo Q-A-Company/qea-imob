@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { PropertyChangeType } from "@/lib/supabase/types";
+import type { PropertyAttributes } from "@/app/(dashboard)/property-reference-link";
 
 export const PAGE_SIZE = 50;
 const PROPERTIES_FETCH_PAGE_SIZE = 1000;
@@ -56,6 +57,8 @@ export interface ReportRow {
   competitorAbbreviation: string;
   referenceCode: string | null;
   url: string;
+  status: "ativo" | "possivelmente_vendido";
+  attributes: PropertyAttributes | null;
   changeType: PropertyChangeType;
   oldPrice: number | null;
   newPrice: number | null;
@@ -165,15 +168,22 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   function buildPropertiesQuery(offset: number) {
     let q = supabase
       .from("properties")
-      .select("id, external_id, reference_code, url, competitor_id, status")
+      .select("id, external_id, reference_code, url, attributes, competitor_id, status")
       .in("competitor_id", targetCompetitorIds);
     if (filters.status !== "ambos") q = q.eq("status", filters.status);
     if (filters.search) q = q.ilike("external_id", `%${filters.search}%`);
     return q.range(offset, offset + PROPERTIES_FETCH_PAGE_SIZE - 1);
   }
 
-  const properties: { id: string; external_id: string; reference_code: string | null; url: string; competitor_id: string; status: string }[] =
-    [];
+  const properties: {
+    id: string;
+    external_id: string;
+    reference_code: string | null;
+    url: string;
+    attributes: PropertyAttributes | null;
+    competitor_id: string;
+    status: "ativo" | "possivelmente_vendido";
+  }[] = [];
   for (let offset = 0; ; offset += PROPERTIES_FETCH_PAGE_SIZE) {
     const { data, error: propertiesError } = await buildPropertiesQuery(offset);
     if (propertiesError) throw new Error(`Falha ao buscar imóveis: ${propertiesError.message}`);
@@ -250,6 +260,8 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
         competitorAbbreviation: meta?.abbreviation ?? "???",
         referenceCode: property.reference_code,
         url: property.url,
+        status: property.status,
+        attributes: property.attributes,
         changeType: change.change_type,
         oldPrice: change.old_price,
         newPrice: change.new_price,

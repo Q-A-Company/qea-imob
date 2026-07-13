@@ -140,6 +140,7 @@ export async function persistAndDetectChanges(
     current_price: number | null;
     price_status: "valor" | "sob_consulta";
     url: string;
+    attributes: { bairro: string | null; quartos: string | null; area: string | null } | null;
     status: "ativo";
     last_seen_at: string;
   }> = [];
@@ -155,6 +156,7 @@ export async function persistAndDetectChanges(
         current_price: captured.price,
         price_status: captured.price_status,
         url: captured.url,
+        attributes: captured.attributes,
         status: "ativo",
         last_seen_at: nowIso,
       });
@@ -164,6 +166,10 @@ export async function persistAndDetectChanges(
     const priceChanged = existing.current_price !== captured.price || existing.price_status !== captured.price_status;
     const reappeared = existing.status === "possivelmente_vendido";
 
+    // attributes: sempre sobrescreve com o mais recente capturado (mesmo
+    // esse valor sendo null) — é uma camada de melhor esforço (ver
+    // types.ts), não faz sentido preservar um atributo velho que já não
+    // corresponde ao que o site mostra agora.
     const { error: updateError } = await supabase
       .from("properties")
       .update({
@@ -171,6 +177,7 @@ export async function persistAndDetectChanges(
         price_status: captured.price_status,
         reference_code: captured.reference_code,
         url: captured.url,
+        attributes: captured.attributes,
         last_seen_at: nowIso,
         status: "ativo",
       })

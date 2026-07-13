@@ -80,7 +80,13 @@ export function ReportTable({
                   )}
                 </div>
                 <div className="mb-1.5 font-mono text-xs text-foreground">
-                  <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
+                  <PropertyReferenceLink
+                    referenceCode={row.referenceCode}
+                    url={row.url}
+                    status={row.status}
+                    attributes={row.attributes}
+                    showDetails
+                  />
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   {row.changeType === "price" ? (
@@ -127,7 +133,13 @@ export function ReportTable({
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-foreground print:!text-black">
-                      <PropertyReferenceLink referenceCode={row.referenceCode} url={row.url} />
+                      <PropertyReferenceLink
+                        referenceCode={row.referenceCode}
+                        url={row.url}
+                        status={row.status}
+                        attributes={row.attributes}
+                        showDetails
+                      />
                     </td>
                     <td className="px-3 py-2 text-xs print:!text-black">
                       {row.changeType === "price" ? (

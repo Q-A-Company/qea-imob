@@ -153,6 +153,14 @@ export interface Database {
           current_price: number | null;
           price_status: PriceStatus;
           url: string;
+          // Camada 3 de identificação de imóvel removido sem
+          // reference_code — melhor esforço, null quando o site não expõe
+          // o dado. Ver comentário equivalente em
+          // packages/scraper/core/types.ts (ExtractedProperty). (Coluna
+          // image_url existe ainda no banco mas não é mais escrita nem lida
+          // — decisão do usuário de não guardar mais foto; ver migration
+          // de remoção da coluna.)
+          attributes: { bairro: string | null; quartos: string | null; area: string | null } | null;
           last_seen_at: string;
           status: PropertyStatus;
           created_at: string;
@@ -165,6 +173,7 @@ export interface Database {
           current_price?: number | null;
           price_status: PriceStatus;
           url: string;
+          attributes?: { bairro: string | null; quartos: string | null; area: string | null } | null;
           last_seen_at?: string;
           status?: PropertyStatus;
           created_at?: string;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { getAccountsData, type AccountListFilters } from "./get-accounts-data";
+import { CreateAccountForm } from "./create-account-form";
 
 function parseFilters(searchParams: Record<string, string | string[] | undefined>): AccountListFilters {
   const statusRaw = typeof searchParams.status === "string" ? searchParams.status : "todos";
@@ -30,6 +31,8 @@ export default async function SuperAdminPage({
           Olá, {profile.full_name ?? profile.id}. Gerencie as contas cadastradas na plataforma.
         </p>
       </div>
+
+      <CreateAccountForm />
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-lg border border-surface-border bg-surface p-4">
         <div className="flex flex-col gap-1.5">

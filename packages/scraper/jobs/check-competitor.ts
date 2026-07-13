@@ -413,6 +413,16 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   // sumiram de verdade ou só não foram alcançados.
   const stoppedEarlyDueToError = result?.stoppedEarlyDueToError ?? true;
   const success = result !== null;
+  // totalFailureMessage cobre exceção não tratada (ex: falha na 1ª página
+  // html_css, que propaga direto); stoppedEarlyErrorReason cobre o caso em
+  // que runPriceCheck RETORNA normalmente com stoppedEarlyDueToError=true
+  // (json_api, quando uma página esgota os retries no meio da paginação) —
+  // antes desse segundo campo existir, esse caso ficava com error_message
+  // vazio, mesmo tendo um motivo real (status HTTP, timeout) descartado
+  // dentro de fetchJsonWithRetry. Investigado depois de a Sentineli parar
+  // consistentemente ~página 60 sem nenhum detalhe do motivo em
+  // scraper_runs.
+  const errorMessage = totalFailureMessage ?? result?.stoppedEarlyErrorReason ?? null;
 
   // Extração completou (não foi falha de rede) mas veio vazia ou majoritariamente
   // sem preço — sinal de seletor obsoleto, não de catálogo esvaziado. Distinto
@@ -448,7 +458,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     success,
     properties_captured: propertiesCaptured,
     changes_detected: 0,
-    error_message: totalFailureMessage,
+    error_message: errorMessage,
     stopped_early_due_to_error: stoppedEarlyDueToError,
     duration_ms: null,
   });
@@ -528,7 +538,7 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
     pausedByCircuitBreaker,
     reactivatedAfterSuccess,
     configMarkedDegraded: configLooksDegraded,
-    errorMessage: totalFailureMessage,
+    errorMessage,
     properties: result?.properties ?? [],
     skippedAlreadyRunning: false,
   };

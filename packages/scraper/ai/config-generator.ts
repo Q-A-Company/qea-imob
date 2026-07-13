@@ -19,9 +19,10 @@ A página contém múltiplos "cards" repetidos, cada um representando um imóvel
    - reference_code: o código/referência VISÍVEL que a imobiliária reconhece (ex: "CI0298", "mu9536") — este é o campo mostrado nas telas pro usuário final. Procure um texto curto no card que pareça um código de referência (diferente do external_id técnico acima). Se não existir nenhum código reconhecível em lugar nenhum do card, deixe null — não invente um substituto nem reuse o external_id ilegível aqui.
 3. Dentro do card, como extrair o preço — incluindo os textos que indicam "preço sob consulta" (indisponível), se existirem.
 4. Dentro do card, o link para a página individual do imóvel.
-5. O padrão de paginação da listagem, se houver.
+5. Dentro do card, atributos estruturados visíveis (bairro/localização, número de quartos, área) — melhor esforço, cada um independente, null se aquele atributo específico não aparecer no card. Isso é só contexto de exibição (ex: pra reconhecer um imóvel que foi removido do site depois e não tem código de referência) — não precisa ser exaustivo nem cobrir todo atributo que o card mostrar, só os três.
+6. O padrão de paginação da listagem, se houver.
 
-Foque apenas nesses campos. Não extraia bairro, área, quartos ou outros dados — não são necessários nesta versão do produto. Se não conseguir identificar um campo com confiança, reflita isso em confidence_score baixo e liste a ressalva em warnings.
+Se não conseguir identificar um campo com confiança, reflita isso em confidence_score baixo e liste a ressalva em warnings — isso vale principalmente pros campos obrigatórios (external_id, price, property_url); pros atributos opcionais, é normal e esperado retornar null quando o site não expõe aquele dado, sem que isso baixe a confiança.
 
 Preste atenção especial a sinais de que a paginação é controlada por JavaScript/AJAX e não por navegação de URL simples: um botão (não um link <a href>) para "próxima página", um container com atributo como data-ajax-result, ou uma lista de páginas vazia no HTML estático. Quando notar esses sinais, defina pagination.type como 'next_link' (ou 'none' se nem isso houver) e adicione um warning explícito dizendo que a paginação pode não funcionar sem executar JavaScript.
 

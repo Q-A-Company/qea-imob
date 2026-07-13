@@ -118,7 +118,12 @@ export function ChangesFeed({ feed }: { feed: FeedItem[] }) {
                   <StatusBadge changeType={item.changeType} />
                 </div>
                 <div className="mb-1.5 font-mono text-xs text-foreground">
-                  <PropertyReferenceLink referenceCode={item.referenceCode} url={item.url} />
+                  <PropertyReferenceLink
+                    referenceCode={item.referenceCode}
+                    url={item.url}
+                    status={item.status}
+                    attributes={item.attributes}
+                  />
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex flex-wrap items-center gap-1 font-mono text-xs">
@@ -151,7 +156,12 @@ export function ChangesFeed({ feed }: { feed: FeedItem[] }) {
                 {feed.map((item) => (
                   <motion.tr key={item.id} variants={itemVariants} className="border-b border-surface-border last:border-b-0">
                     <td className="px-4 py-2.5 font-mono text-xs text-foreground">
-                      <PropertyReferenceLink referenceCode={item.referenceCode} url={item.url} />
+                      <PropertyReferenceLink
+                        referenceCode={item.referenceCode}
+                        url={item.url}
+                        status={item.status}
+                        attributes={item.attributes}
+                      />
                     </td>
                     <td className="px-4 py-2.5">
                       <CompetitorBadge item={item} />

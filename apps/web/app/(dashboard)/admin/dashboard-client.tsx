@@ -8,7 +8,6 @@ import { KpiCard } from "./kpi-card";
 import { ChangesFeed } from "./changes-feed";
 import { CompetitorPieChart } from "./competitor-pie-chart";
 import { HourlyVolumeChart } from "./hourly-volume-chart";
-import { VolatilePropertiesCard } from "./volatile-properties-card";
 import { EmptyState } from "./empty-state";
 import type { DashboardData } from "./get-dashboard-data";
 
@@ -121,7 +120,6 @@ export function DashboardClient({
                 <CompetitorPieChart breakdownByWindow={data.breakdownByWindow} />
               </div>
               <HourlyVolumeChart hourlyVolumes={data.hourlyVolumes30d} />
-              <VolatilePropertiesCard properties={data.topVolatileProperties30d} />
             </motion.div>
           </div>
         </>

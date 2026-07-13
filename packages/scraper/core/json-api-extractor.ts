@@ -1,12 +1,29 @@
 import type { JsonApiSiteConfig } from "../ai/site-config-schema.js";
 import type { ExtractedProperty } from "./types.js";
 import { normalizeExternalId } from "./text-utils.js";
+import { assertAllowedByRobots } from "./robots.js";
 
 export interface JsonApiExtractionResult {
   properties: ExtractedProperty[];
   pagesFetched: number;
   itemsSkippedMissingField: number;
   stoppedEarlyDueToError: boolean;
+  // Motivo real da última tentativa que falhou (ex: "HTTP 500", "HTTP 429",
+  // ou a mensagem de uma exceção de rede/timeout) — null quando
+  // stoppedEarlyDueToError é false. Antes disso existir, uma falha aqui
+  // virava stoppedEarlyDueToError=true mas scraper_runs.error_message
+  // ficava vazio (diferente do caminho html_css, que sempre teve a
+  // mensagem real via exceção) — impossível diagnosticar 429 vs 500 vs
+  // timeout depois do fato. Ver investigação real da Sentineli parando
+  // consistentemente ~página 60.
+  stoppedEarlyErrorReason: string | null;
+}
+
+interface FetchJsonResult {
+  body: Record<string, unknown> | null;
+  // Preenchido só quando body é null — motivo da falha definitiva
+  // (esgotou os retries, ou um 4xx não-retryable de cara).
+  errorReason: string | null;
 }
 
 const USER_AGENT = "Q&A Imob Bot/1.0 (contato@qeacompany.com.br)";
@@ -44,19 +61,24 @@ function sleep(ms: number): Promise<void> {
 // rate limit, timeout de rede) não pode derrubar a extração inteira e
 // perder as páginas já coletadas — só desiste depois de MAX_RETRIES
 // tentativas nessa página específica.
-async function fetchJsonWithRetry(url: string, init: RequestInit): Promise<Record<string, unknown> | null> {
+async function fetchJsonWithRetry(url: string, init: RequestInit): Promise<FetchJsonResult> {
+  let lastErrorReason: string | null = null;
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
       if (res.ok) {
-        return (await res.json()) as Record<string, unknown>;
+        return { body: (await res.json()) as Record<string, unknown>, errorReason: null };
       }
+      lastErrorReason = `HTTP ${res.status}`;
       if (res.status < 500 && res.status !== 429) {
         // erro do cliente (não transitório) — repetir não vai ajudar
-        return null;
+        return { body: null, errorReason: lastErrorReason };
       }
-    } catch {
-      // erro de rede/timeout — tenta de novo com backoff
+    } catch (err) {
+      // erro de rede/timeout — tenta de novo com backoff, mas guarda a
+      // mensagem real caso essa seja a última tentativa.
+      lastErrorReason = err instanceof Error ? err.message : String(err);
     }
 
     if (attempt < MAX_RETRIES) {
@@ -64,7 +86,7 @@ async function fetchJsonWithRetry(url: string, init: RequestInit): Promise<Recor
     }
   }
 
-  return null;
+  return { body: null, errorReason: lastErrorReason };
 }
 
 function buildRequest(config: JsonApiSiteConfig, page: number): { url: string; init: RequestInit } {
@@ -96,13 +118,28 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
   let pagesFetched = 0;
   let total: number | null = null;
   let stoppedEarlyDueToError = false;
+  let stoppedEarlyErrorReason: string | null = null;
+
+  // Checa robots.txt UMA vez, contra a URL da 1ª página, antes de qualquer
+  // requisição de dado de verdade — não a cada página (diferente do
+  // caminho html_css, onde fetchListingHtml reconfere isso em toda
+  // chamada): o template do endpoint só varia o valor de paginação, então
+  // origin+pathname (o que as regras de Disallow comparam) é idêntico em
+  // todas as páginas desta execução; reconferir por página seria trabalho
+  // repetido sem checar nada novo. Lança (não retorna null) — mesmo
+  // tratamento de robots.txt que já existia só no lado html_css antes
+  // desta correção; propaga como falha real pro chamador (checkCompetitor),
+  // não como "esgotei os retries".
+  const { url: firstPageUrl } = buildRequest(config, page);
+  await assertAllowedByRobots(firstPageUrl);
 
   while (pagesFetched < MAX_PAGES) {
     const { url, init } = buildRequest(config, page);
-    const body = await fetchJsonWithRetry(url, init);
+    const { body, errorReason } = await fetchJsonWithRetry(url, init);
 
     if (body === null) {
       stoppedEarlyDueToError = true;
+      stoppedEarlyErrorReason = errorReason;
       break;
     }
 
@@ -143,12 +180,31 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
       // condicional a mais, sem lógica especial.
       const referenceCodeValue = config.reference_code_field ? getField(item, config.reference_code_field) : null;
 
+      // attributes — mesma camada 3 de html-extractor.ts (camada 2 de foto
+      // foi removida). config.attributes_fields pode ser undefined pra
+      // configs gravados antes desta mudança (todos os json_api de hoje são
+      // construídos à mão, ver README) — `?.` cobre isso, mesmo motivo do
+      // optional() no schema.
+      const attrFields = config.attributes_fields;
+      const bairroValue = attrFields?.bairro_field ? getField(item, attrFields.bairro_field) : null;
+      const quartosValue = attrFields?.quartos_field ? getField(item, attrFields.quartos_field) : null;
+      const areaValue = attrFields?.area_field ? getField(item, attrFields.area_field) : null;
+      const attributes =
+        bairroValue != null || quartosValue != null || areaValue != null
+          ? {
+              bairro: bairroValue != null ? String(bairroValue) : null,
+              quartos: quartosValue != null ? String(quartosValue) : null,
+              area: areaValue != null ? String(areaValue) : null,
+            }
+          : null;
+
       properties.push({
         external_id: normalizeExternalId(String(externalIdValue)),
         reference_code: referenceCodeValue != null ? normalizeExternalId(String(referenceCodeValue)) : null,
         price,
         price_status: price !== null ? "valor" : "sob_consulta",
         url: `${config.property_url_base}${urlValue}${suffixValue != null ? `/${suffixValue}` : ""}`,
+        attributes,
       });
     }
 
@@ -157,5 +213,5 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
     await sleep(DELAY_BETWEEN_PAGES_MS);
   }
 
-  return { properties, pagesFetched, itemsSkippedMissingField, stoppedEarlyDueToError };
+  return { properties, pagesFetched, itemsSkippedMissingField, stoppedEarlyDueToError, stoppedEarlyErrorReason };
 }

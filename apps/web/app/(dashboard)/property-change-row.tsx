@@ -33,7 +33,13 @@ export function PropertyChangeRow({ change }: { change: RunChangeDetail }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-1.5 text-xs">
       <span className="flex items-center gap-2">
-        <PropertyReferenceLink referenceCode={change.referenceCode} url={change.url} className="font-mono text-foreground" />
+        <PropertyReferenceLink
+          referenceCode={change.referenceCode}
+          url={change.url}
+          status={change.status ?? "ativo"}
+          attributes={change.attributes}
+          className="font-mono text-foreground"
+        />
         <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${CHANGE_TYPE_BADGE_CLASS[change.changeType]}`}>
           {CHANGE_TYPE_LABEL[change.changeType]}
         </span>
