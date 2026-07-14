@@ -147,7 +147,21 @@ export const JsonApiSiteConfig = z.object({
     .describe(
       "Campo do item com o código/referência VISÍVEL do imóvel (mesma notação com '.' de total_field) — o que a imobiliária reconhece, mostrado nas telas. Pode ser o mesmo campo de external_id_field quando ele já for legível (ex: um campo 'codigo'/'referencia' textual, não um ID numérico interno), ou um campo diferente. null se não existir um código legível separado."
     ),
-  price_field: z.string().describe("Campo do item com o preço numérico"),
+  price_field: z.string().describe("Campo do item com o preço — numérico bruto OU texto formatado (ex: 'R$ 1.607.000'), dependendo de price_is_formatted_text"),
+  // .optional() pelo mesmo motivo dos campos abaixo — configs json_api
+  // gravados antes desta mudança não têm essa chave (assumiam sempre
+  // número bruto, comportamento preservado quando ausente/false). Achado
+  // real: a API pública da Lopes só expõe o preço já formatado como texto
+  // (priceFormat: "R$ 1.607.000"), nunca um campo numérico — sem isso, todo
+  // imóvel desse tipo de site cairia em price_status "sob_consulta" mesmo
+  // tendo preço de verdade. Reaproveita a mesma lógica de moeda brasileira
+  // já usada em html_css (core/price-parser.ts), não duplicada aqui.
+  price_is_formatted_text: z
+    .boolean()
+    .optional()
+    .describe(
+      "true quando price_field aponta pra um texto formatado em moeda brasileira (ex: 'R$ 1.607.000', 'R$ 1.607.000,50') em vez de um número bruto — nesse caso o valor é parseado com a mesma lógica usada em html_css. false/ausente (default) quando price_field já é numérico, comportamento de sempre."
+    ),
   price_unavailable_field: z
     .string()
     .nullable()

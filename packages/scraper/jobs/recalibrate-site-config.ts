@@ -70,6 +70,7 @@ export async function recalibrateSiteConfig(competitorId: string): Promise<Recal
       confidence_score: learned.selectors.confidence_score,
       status: activated ? "ativo" : "pendente_revisao",
       last_validated_at: activated ? new Date().toISOString() : null,
+      cards_found: learned.stats.cardsFound,
     })
     .select("id")
     .single();

@@ -8,7 +8,8 @@ import { checkCompetitor } from "scraper/jobs/check-competitor";
 import { learnSiteConfig } from "scraper/jobs/learn-site-config";
 import { RobotsDisallowedError } from "scraper/core/robots";
 import { minimumSafeIntervalMinutes } from "scraper/core/polling-interval";
-import { ALLOWED_POLLING_INTERVALS } from "./constants";
+import { createNotification } from "scraper/core/notify";
+import { ALLOWED_POLLING_INTERVALS, REGISTRATION_MIN_COVERAGE_RATIO } from "./constants";
 import { normalizeListingUrl } from "./normalize-url";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -113,6 +114,12 @@ export interface RegisterCompetitorState {
     // catálogo inteiro. json_api nunca marca isso — sua prévia já é
     // exaustiva (extractFromJsonApi pagina de verdade durante o aprendizado).
     paginationDetectedWithoutTotal: boolean;
+    // true quando cardsFound/totalListingsHint < REGISTRATION_MIN_COVERAGE_RATIO
+    // — o Admin não pode auto-aprovar (confirmSiteConfigAction recusa no
+    // servidor mesmo que esta flag seja ignorada no cliente); só um
+    // SuperAdmin. false quando totalListingsHint é desconhecido (não dá
+    // pra calcular cobertura sem ele — não bloqueia por falta de dado).
+    requiresSuperAdminApproval: boolean;
   };
   // Preenchido só quando o competitor FOI criado mas o aprendizado via IA
   // falhou (site fora do ar, timeout, etc.) — distinto de `error`, que
@@ -160,7 +167,7 @@ export async function registerCompetitorAction(
   const normalizedUrl = normalizeListingUrl(listingUrl);
   const { data: existing } = await supabase
     .from("competitors")
-    .select("name, status")
+    .select("id, name, status")
     .eq("account_id", profile.account_id)
     .eq("listing_url_normalized", normalizedUrl)
     .maybeSingle();
@@ -170,6 +177,21 @@ export async function registerCompetitorAction(
         error: `"${existing.name}" já foi cadastrado antes com esta URL e está arquivado — reative-o na aba Arquivados em vez de cadastrar de novo (evita aprender o site outra vez).`,
       };
     }
+
+    // Mesmo critério de page.tsx (awaitingApprovalIds) — cadastro novo cuja
+    // única config ainda está pendente_revisao, nunca teve nada ativo.
+    // Mensagem específica em vez do genérico "já cadastrado": pedido do
+    // usuário depois de perceber que o Admin tentava recadastrar a mesma URL
+    // sem saber que já existia um cadastro esperando o SuperAdmin.
+    const { data: existingConfigs } = await supabase.from("site_configs").select("version, status").eq("competitor_id", existing.id);
+    const hasActive = (existingConfigs ?? []).some((sc) => sc.status === "ativo");
+    const hasPendingFresh = (existingConfigs ?? []).some((sc) => sc.version === 1 && sc.status === "pendente_revisao");
+    if (!hasActive && hasPendingFresh) {
+      return {
+        error: `"${existing.name}" já foi cadastrado com esta URL e está aguardando aprovação de um SuperAdmin — espere a revisão (ou descarte esse cadastro na tela de revisão, se ela ainda estiver aberta) antes de tentar recadastrar.`,
+      };
+    }
+
     return { error: `"${existing.name}" já está cadastrado nesta conta com esta URL.` };
   }
 
@@ -224,6 +246,7 @@ export async function registerCompetitorAction(
         version: 1,
         confidence_score: learned.selectors.confidence_score,
         status: "pendente_revisao",
+        cards_found: learned.stats.cardsFound,
       })
       .select("id")
       .single();
@@ -232,6 +255,22 @@ export async function registerCompetitorAction(
     }
 
     const hasPagination = learned.selectors.strategy === "html_css" && learned.selectors.pagination.type !== "none";
+
+    // Gate de qualidade: cobertura abaixo do limite bloqueia auto-aprovação
+    // pelo Admin da própria conta (confirmSiteConfigAction recusa isso de
+    // verdade no servidor — este cálculo aqui só decide a MENSAGEM/UI, não
+    // é a garantia). totalListingsHint null → não dá pra calcular
+    // cobertura, não bloqueia por falta de dado.
+    const { totalListingsHint, cardsFound } = learned.stats;
+    const coverageRatio = totalListingsHint && totalListingsHint > 0 ? cardsFound / totalListingsHint : null;
+    const requiresSuperAdminApproval = coverageRatio !== null && coverageRatio < REGISTRATION_MIN_COVERAGE_RATIO;
+
+    // Notificação NÃO dispara mais sozinha aqui — pedido do usuário pra que o
+    // Admin decida explicitamente clicando "Enviar para o SuperAdmin"
+    // (sendToSuperAdminAction abaixo). Até esse clique, o site_config fica
+    // 'pendente_revisao' mas invisível pro SuperAdmin (ver filtro em
+    // get-pending-site-configs.ts/get-account-settings-data.ts por
+    // sent_to_superadmin_at).
 
     return {
       learning: {
@@ -244,6 +283,7 @@ export async function registerCompetitorAction(
         warnings: learned.selectors.warnings,
         externalIdSanityOk: learned.externalIdSanityOk,
         paginationDetectedWithoutTotal: hasPagination && learned.stats.totalListingsHint === null,
+        requiresSuperAdminApproval,
       },
     };
   } catch (err) {
@@ -280,6 +320,81 @@ export async function registerCompetitorAction(
       }. Ele não será checado até uma configuração ser aprendida (rode a recalibração manualmente ou recadastre).`,
     };
   }
+}
+
+export interface SendToSuperAdminState {
+  error?: string;
+  success?: boolean;
+}
+
+// Dispara a notificação pro SuperAdmin sob demanda — antes disso o
+// site_config já nasce 'pendente_revisao' (cobertura baixa, version=1) mas
+// fica invisível pro SuperAdmin (ver filtro por sent_to_superadmin_at em
+// get-pending-site-configs.ts/get-account-settings-data.ts). Clicar aqui
+// sempre dispara de verdade, sem diálogo de confirmação no meio: um único
+// botão ("ENVIAR PARA O SUPERADMIN") já causa o envio; a tela só mostra
+// "Entendido!" depois, como reconhecimento — não como uma segunda chance de
+// cancelar o que já foi enviado.
+export async function sendToSuperAdminAction(siteConfigId: string): Promise<SendToSuperAdminState> {
+  const profile = await requireRole(["admin", "gerente"]);
+  if (!profile.account_id) return { error: "Conta inválida" };
+  const supabase = await createClient();
+
+  const { data: siteConfig } = await supabase
+    .from("site_configs")
+    .select("id, competitor_id, version, status, cards_found, selectors, sent_to_superadmin_at")
+    .eq("id", siteConfigId)
+    .single();
+  const { data: competitor } = siteConfig
+    ? await supabase.from("competitors").select("id, account_id, name").eq("id", siteConfig.competitor_id).single()
+    : { data: null };
+
+  if (!siteConfig || !competitor || competitor.account_id !== profile.account_id) {
+    return { error: "Configuração não encontrada ou não pertence à sua conta" };
+  }
+  if (siteConfig.version !== 1 || siteConfig.status !== "pendente_revisao") {
+    return { error: "Este cadastro não está mais aguardando envio." };
+  }
+  if (siteConfig.sent_to_superadmin_at) {
+    return { success: true };
+  }
+
+  const { error: updateError } = await supabase
+    .from("site_configs")
+    .update({ sent_to_superadmin_at: new Date().toISOString() })
+    .eq("id", siteConfigId);
+  if (updateError) return { error: `Falha ao enviar: ${updateError.message}` };
+
+  const totalListingsHint = (siteConfig.selectors as { total_listings_hint?: number | null } | null)?.total_listings_hint ?? null;
+  const cardsFound = siteConfig.cards_found;
+  const coverageRatio = cardsFound !== null && totalListingsHint && totalListingsHint > 0 ? cardsFound / totalListingsHint : null;
+
+  // notifications não tem policy de INSERT pra membros da conta (só
+  // SuperAdmin/service role) — service client só pra esta chamada, mesmo
+  // padrão já usado por check-competitor.ts/recalibrate-site-config.ts.
+  await createNotification(createServiceClient(), {
+    accountId: profile.account_id,
+    competitorId: competitor.id,
+    title: `Cadastro aguardando aprovação: ${competitor.name}`,
+    message:
+      coverageRatio !== null
+        ? `"${competitor.name}" capturou ${cardsFound} de ${totalListingsHint} imóveis declarados (${Math.round(
+            coverageRatio * 100
+          )}%) — cobertura baixa demais para auto-aprovação. Um SuperAdmin precisa revisar antes de ativar.`
+        : `"${competitor.name}" está aguardando revisão de um SuperAdmin antes de ativar.`,
+  });
+
+  await logAuditEvent({
+    actorUserId: profile.id,
+    accountId: profile.account_id,
+    actionType: "site_config_sent_to_superadmin",
+    targetType: "site_config",
+    targetId: siteConfigId,
+    details: { competitorName: competitor.name },
+  });
+
+  revalidatePath("/admin/competitors");
+  return { success: true };
 }
 
 export interface ConfirmSiteConfigState {
@@ -329,6 +444,22 @@ async function rejectPendingRecalibration(supabase: SupabaseClient<Database>, si
 
 // Ativa um site_config que estava 'pendente_revisao' depois do Admin
 // revisar a prévia de cobertura/confiança na tela.
+//
+// Dois gates de verdade no SERVIDOR, não só na UI — achado real
+// investigando o gate de cobertura: `activateSiteConfig` não conferia
+// `version` nem `status` atual, só posse de conta; a única razão de uma
+// recalibração incompatível (version>1) nunca ter sido auto-aprovada pelo
+// Admin era a UI nunca oferecer esse siteConfigId pra ele, não uma trava
+// real — "funcionava por acidente". Corrigido aqui, os dois casos juntos:
+//   1. version > 1 SEMPRE recusado pro Admin, incondicionalmente — uma
+//      recalibração incompatível com o external_id anterior só pode ser
+//      aprovada por um SuperAdmin (confirmSiteConfigActionForSuperAdmin),
+//      como já era a intenção desde a Etapa 7.
+//   2. version === 1 com cobertura abaixo de REGISTRATION_MIN_COVERAGE_RATIO
+//      também recusado — recalculado aqui a partir de cards_found (coluna
+//      nova) + total_listings_hint (já dentro de selectors), não confia
+//      num booleano pré-computado no cadastro: assim continua correto
+//      mesmo se o limite mudar depois de o registro já existir.
 export async function confirmSiteConfigAction(siteConfigId: string): Promise<ConfirmSiteConfigState> {
   const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
@@ -339,13 +470,35 @@ export async function confirmSiteConfigAction(siteConfigId: string): Promise<Con
   // get-dashboard-data.ts). Confirma posse antes da mutação: a mutação em
   // si já roda com o cliente RLS-scoped do usuário, mas reverificar aqui dá
   // uma mensagem de erro clara em vez de um 0-rows-affected silencioso.
-  const { data: siteConfig } = await supabase.from("site_configs").select("id, competitor_id").eq("id", siteConfigId).single();
+  const { data: siteConfig } = await supabase
+    .from("site_configs")
+    .select("id, competitor_id, version, cards_found, selectors")
+    .eq("id", siteConfigId)
+    .single();
   const { data: competitor } = siteConfig
     ? await supabase.from("competitors").select("account_id").eq("id", siteConfig.competitor_id).single()
     : { data: null };
 
   if (!siteConfig || !competitor || competitor.account_id !== profile.account_id) {
     return { error: "Configuração não encontrada ou não pertence à sua conta" };
+  }
+
+  if (siteConfig.version > 1) {
+    return {
+      error:
+        "Esta é uma recalibração de um concorrente já ativo, não um cadastro novo — só um SuperAdmin pode aprovar, pra não arriscar quebrar a continuidade do histórico já existente.",
+    };
+  }
+
+  const totalListingsHint = (siteConfig.selectors as { total_listings_hint?: number | null } | null)?.total_listings_hint ?? null;
+  const cardsFound = siteConfig.cards_found;
+  const coverageRatio = cardsFound !== null && totalListingsHint && totalListingsHint > 0 ? cardsFound / totalListingsHint : null;
+  if (coverageRatio !== null && coverageRatio < REGISTRATION_MIN_COVERAGE_RATIO) {
+    return {
+      error: `Cobertura muito baixa (${cardsFound} de ${totalListingsHint} imóveis — ${Math.round(
+        coverageRatio * 100
+      )}%) para auto-aprovação — um SuperAdmin já foi avisado e precisa revisar antes de ativar.`,
+    };
   }
 
   const result = await activateSiteConfig(supabase, siteConfigId);
@@ -415,6 +568,19 @@ export async function confirmSiteConfigActionForSuperAdmin(siteConfigId: string,
     targetType: "site_config",
     targetId: siteConfigId,
     details: { competitorName: competitor.name },
+  });
+
+  // Avisa a imobiliária cliente que o cadastro que ela mandou esperar (fluxo
+  // de baixa cobertura) ou a recalibração pendente foi aprovada — sem isso, o
+  // Admin não tinha nenhum jeito de saber que a espera acabou além de ficar
+  // checando a tela manualmente. `supabase` aqui já é o service client
+  // (mesmo motivo de sempre: notifications não tem policy de INSERT pra
+  // membros da conta).
+  await createNotification(supabase, {
+    accountId,
+    competitorId: siteConfig.competitor_id,
+    title: `Cadastro aprovado: ${competitor.name}`,
+    message: `"${competitor.name}" foi aprovado por um SuperAdmin — já está ativo e as checagens de preço vão rodar normalmente.`,
   });
 
   revalidatePath(`/superadmin/accounts/${accountId}/settings`);

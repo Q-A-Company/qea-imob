@@ -7,9 +7,6 @@ import type { ExtractedProperty } from "../core/types.js";
 export interface RunPriceCheckResult {
   properties: ExtractedProperty[];
   pagesFetched: number;
-  // vazio para json_api hoje — extractFromJsonApi não dedupe entre páginas
-  // (cada item de resposta paginada é assumido único pela API de origem;
-  // não observamos duplicata real em nenhum dos sites json_api validados).
   duplicateExternalIds: string[];
   cardsWithoutPrice: number;
   cardsWithoutExternalId: number;
@@ -23,6 +20,12 @@ export interface RunPriceCheckResult {
   // veio de uma exceção que já propaga sozinha pro chamador (ver
   // checkCompetitor: falha na 1ª página html_css não passa por aqui).
   stoppedEarlyErrorReason: string | null;
+  // Total declarado pela própria fonte, quando existe — só json_api expõe
+  // isso hoje (via total_field); html_css não tem esse conceito na
+  // checagem de rotina (a paginação segue até não achar mais página, sem
+  // nenhum "total" declarado em separado), então fica sempre null nesse
+  // caminho. Usado por check-competitor.ts pra detectar cobertura baixa.
+  totalDeclared: number | null;
 }
 
 // Etapa 4: extração determinística de rotina — usa a site_config JÁ SALVA
@@ -40,11 +43,12 @@ export async function runPriceCheck(params: {
     return {
       properties: result.properties,
       pagesFetched: result.pagesFetched,
-      duplicateExternalIds: [],
+      duplicateExternalIds: result.duplicateExternalIds,
       cardsWithoutPrice: 0,
       cardsWithoutExternalId: result.itemsSkippedMissingField,
       stoppedEarlyDueToError: result.stoppedEarlyDueToError,
       stoppedEarlyErrorReason: result.stoppedEarlyErrorReason,
+      totalDeclared: result.total,
     };
   }
 
@@ -62,12 +66,12 @@ export async function runPriceCheck(params: {
     cardsWithoutPrice: result.cardsWithoutPrice,
     cardsWithoutExternalId: result.cardsWithoutExternalId,
     stoppedEarlyDueToError: result.stoppedReason === "fetch_failed",
-    // html-paginator.ts (página 2+) tem o MESMO gap que existia em
-    // json-api-extractor.ts antes desta correção — fetchHtmlWithRetry
-    // também descarta o motivo real da falha, só devolve html: null. Não
-    // corrigido aqui (fora do escopo pedido); falha na 1ª página nem passa
+    // Mesmo padrão de detalhe que já existia pro json_api — html-paginator.ts
+    // (fetchHtmlWithRetry, página 2+) agora também propaga o motivo real da
+    // falha em vez de só devolver html: null. Falha na 1ª página nem passa
     // por este branch (fetchListingHtml lança direto, propaga com a
     // mensagem real via o catch em checkCompetitor).
-    stoppedEarlyErrorReason: null,
+    stoppedEarlyErrorReason: result.stoppedEarlyErrorReason,
+    totalDeclared: null,
   };
 }

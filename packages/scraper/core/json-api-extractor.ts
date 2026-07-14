@@ -2,11 +2,23 @@ import type { JsonApiSiteConfig } from "../ai/site-config-schema.js";
 import type { ExtractedProperty } from "./types.js";
 import { normalizeExternalId } from "./text-utils.js";
 import { assertAllowedByRobots } from "./robots.js";
+import { parsePriceBR } from "./price-parser.js";
 
 export interface JsonApiExtractionResult {
   properties: ExtractedProperty[];
   pagesFetched: number;
   itemsSkippedMissingField: number;
+  // Mesmo raciocínio de duplicateExternalIds em PaginatedExtractionResult
+  // (html-paginator.ts) — antes disso não existir aqui, o comentário desta
+  // interface (e de run-price-check.ts) dizia que "cada item de resposta
+  // paginada é assumido único pela API de origem" porque nenhum site
+  // json_api validado até então repetia itens entre páginas. Investigando
+  // lopes.com.br (endpoint de busca "cache") isso se provou falso: a mesma
+  // API devolveu 118 external_id repetidos ao longo de 22 páginas — sem
+  // dedupe, o upsert em persist-and-compare.ts falha de verdade (Postgres:
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" quando
+  // o mesmo external_id aparece duas vezes no mesmo lote de INSERT).
+  duplicateExternalIds: string[];
   stoppedEarlyDueToError: boolean;
   // Motivo real da última tentativa que falhou (ex: "HTTP 500", "HTTP 429",
   // ou a mensagem de uma exceção de rede/timeout) — null quando
@@ -17,6 +29,14 @@ export interface JsonApiExtractionResult {
   // timeout depois do fato. Ver investigação real da Sentineli parando
   // consistentemente ~página 60.
   stoppedEarlyErrorReason: string | null;
+  // Total declarado pela própria API (config.total_field), quando existe —
+  // null se o site não expõe esse campo. Usado pelo chamador
+  // (check-competitor.ts) pra detectar cobertura baixa numa checagem de
+  // rotina (capturado << declarado), não só "0 capturado" ou "maioria sem
+  // preço" — achado real investigando um limite fixo de linesPerPage que,
+  // se o catálogo crescer além dele, faria a extração completar "com
+  // sucesso" só que capturando uma fração, sem nenhum alerta hoje.
+  total: number | null;
 }
 
 interface FetchJsonResult {
@@ -113,6 +133,8 @@ function buildRequest(config: JsonApiSiteConfig, page: number): { url: string; i
 
 export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<JsonApiExtractionResult> {
   const properties: ExtractedProperty[] = [];
+  const seenIds = new Set<string>();
+  const duplicateExternalIds: string[] = [];
   let itemsSkippedMissingField = 0;
   let page = config.starting_page;
   let pagesFetched = 0;
@@ -153,6 +175,9 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
     const items = getField(body, config.items_field);
     if (!Array.isArray(items) || items.length === 0) break;
 
+    let newCount = 0;
+    let duplicatesThisPage = 0;
+
     for (const rawItem of items) {
       const item = rawItem as Record<string, unknown>;
 
@@ -163,12 +188,31 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
         continue;
       }
 
+      // Dedupe ANTES de processar o resto do item — barato (normaliza só o
+      // id) e evita gastar trabalho num item que será descartado de
+      // qualquer jeito. Ver comentário de duplicateExternalIds acima.
+      const normalizedExternalId = normalizeExternalId(String(externalIdValue));
+      if (seenIds.has(normalizedExternalId)) {
+        duplicateExternalIds.push(normalizedExternalId);
+        duplicatesThisPage++;
+        continue;
+      }
+      seenIds.add(normalizedExternalId);
+      newCount++;
+
       const isUnavailable = config.price_unavailable_field
         ? getField(item, config.price_unavailable_field) === true
         : false;
 
       const priceValue = getField(item, config.price_field);
-      const price = !isUnavailable && typeof priceValue === "number" ? priceValue : null;
+      let price: number | null = null;
+      if (!isUnavailable) {
+        if (typeof priceValue === "number") {
+          price = priceValue;
+        } else if (config.price_is_formatted_text && typeof priceValue === "string") {
+          price = parsePriceBR(priceValue);
+        }
+      }
 
       const suffixValue = config.property_url_suffix_field
         ? getField(item, config.property_url_suffix_field)
@@ -199,7 +243,7 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
           : null;
 
       properties.push({
-        external_id: normalizeExternalId(String(externalIdValue)),
+        external_id: normalizedExternalId,
         reference_code: referenceCodeValue != null ? normalizeExternalId(String(referenceCodeValue)) : null,
         price,
         price_status: price !== null ? "valor" : "sob_consulta",
@@ -209,9 +253,26 @@ export async function extractFromJsonApi(config: JsonApiSiteConfig): Promise<Jso
     }
 
     page += config.page_increment;
+
+    // Página inteira já vista (0 itens genuinamente novos, mas pelo menos 1
+    // duplicata real) — sinal de que a API já deu a volta no mesmo
+    // conjunto, mesmo que `total` diga que ainda falta gente. Sem isso,
+    // uma API com total_field errado/instável (caso do Lopes) pagina até
+    // MAX_PAGES de propósito nenhum. Distinto de itemsSkippedMissingField
+    // (que não para o loop) — aqui exige duplicata de verdade observada,
+    // não só ausência de campo.
+    if (duplicatesThisPage > 0 && newCount === 0) break;
     if (total !== null && properties.length >= total) break;
     await sleep(DELAY_BETWEEN_PAGES_MS);
   }
 
-  return { properties, pagesFetched, itemsSkippedMissingField, stoppedEarlyDueToError, stoppedEarlyErrorReason };
+  return {
+    properties,
+    pagesFetched,
+    itemsSkippedMissingField,
+    duplicateExternalIds,
+    stoppedEarlyDueToError,
+    stoppedEarlyErrorReason,
+    total,
+  };
 }

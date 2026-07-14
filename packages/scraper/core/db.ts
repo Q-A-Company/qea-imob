@@ -22,6 +22,7 @@ export interface SiteConfigRow {
   version: number;
   confidence_score: number | null;
   status: "ativo" | "degradado" | "aprendendo" | "pendente_revisao";
+  cards_found: number | null;
   last_validated_at: string | null;
 }
 

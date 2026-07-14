@@ -14,6 +14,44 @@ export class RobotsDisallowedError extends Error {
 
 const USER_AGENT = "Q&A Imob Bot/1.0 (contato@qeacompany.com.br)";
 
+interface Rule {
+  type: "allow" | "disallow";
+  value: string;
+}
+
+// Converte um valor de Disallow/Allow (podendo ter "*" = qualquer sequência
+// de caracteres, e "$" no final = ancora fim da URL) numa regex de PREFIXO.
+// Achado real (investigação da poemma.com.br): a implementação anterior
+// tratava o valor como prefixo literal (`pathname.startsWith(valor)`) — uma
+// regra comum tipo "Disallow: */busca*" nunca batia (pathname nunca começa
+// literalmente com o caractere "*"), então uma proibição explícita e real
+// era silenciosamente ignorada, devolvendo "permitido" quando deveria
+// bloquear. "*"/"$" são convenção padrão de fato (Google, Bing, e a
+// RFC 9309) mesmo não estando no RFC original de 1994.
+function ruleToRegex(value: string): RegExp {
+  const hasEndAnchor = value.endsWith("$");
+  const body = hasEndAnchor ? value.slice(0, -1) : value;
+  const escaped = body
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${escaped}${hasEndAnchor ? "$" : ""}`);
+}
+
+// Regra mais ESPECÍFICA vence quando Allow e Disallow batem na mesma URL —
+// mesmo critério documentado pelo Google (comprimento do valor da regra
+// ANTES de virar regex, não da regex resultante). Sem isso, um site com
+// "Disallow: /busca" + "Allow: /busca/publico" bloquearia até a exceção
+// explícita que ele mesmo concedeu.
+function isAllowedByRules(pathname: string, rules: Rule[]): boolean {
+  let bestMatch: Rule | null = null;
+  for (const rule of rules) {
+    if (!ruleToRegex(rule.value).test(pathname)) continue;
+    if (!bestMatch || rule.value.length > bestMatch.value.length) bestMatch = rule;
+  }
+  return bestMatch === null || bestMatch.type === "allow";
+}
+
 export async function isAllowedByRobots(url: string): Promise<boolean> {
   const target = new URL(url);
   const robotsUrl = `${target.origin}/robots.txt`;
@@ -31,7 +69,7 @@ export async function isAllowedByRobots(url: string): Promise<boolean> {
   }
 
   let appliesToUs = false;
-  const disallowed: string[] = [];
+  const rules: Rule[] = [];
 
   for (const rawLine of robotsTxt.split("\n")) {
     const line = rawLine.split("#")[0].trim();
@@ -44,11 +82,16 @@ export async function isAllowedByRobots(url: string): Promise<boolean> {
     if (key === "user-agent") {
       appliesToUs = value === "*";
     } else if (appliesToUs && key === "disallow" && value) {
-      disallowed.push(value);
+      rules.push({ type: "disallow", value });
+    } else if (appliesToUs && key === "allow" && value) {
+      rules.push({ type: "allow", value });
     }
   }
 
-  return !disallowed.some((prefix) => target.pathname.startsWith(prefix));
+  // path + query — regras de robots.txt valem sobre a URL inteira que seria
+  // requisitada, não só o path (ex: "Disallow: /*?filtro=" bloquearia um
+  // parâmetro específico, não a rota em si).
+  return isAllowedByRules(`${target.pathname}${target.search}`, rules);
 }
 
 // Lança se a URL estiver bloqueada — ponto único que os 3 caminhos de

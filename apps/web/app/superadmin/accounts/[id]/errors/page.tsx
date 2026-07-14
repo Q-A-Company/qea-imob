@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
 import { formatDuration } from "@/lib/format";
 import { getRunChangesByRunId } from "@/lib/scraper-runs/get-run-changes";
 import { ExpandableRow } from "@/app/(dashboard)/expandable-row";
@@ -23,10 +24,19 @@ export default async function AccountErrorsPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ page?: string }>;
 }) {
-  await requireRole("superadmin");
+  const profile = await requireRole("superadmin");
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
   const page = Math.max(1, Number(resolvedSearchParams.page) || 1);
+
+  // Marca "visitou agora" — é isso que apaga o aviso na nav
+  // (account-sidebar.tsx/getHasNewErrorsForAccount), mesmo sem nenhuma ação
+  // de "limpar" explícita (pedido do usuário). Por usuário+conta: cada
+  // SuperAdmin tem seu próprio "já vi isso".
+  const supabase = await createClient();
+  await supabase
+    .from("superadmin_error_report_views")
+    .upsert({ user_id: profile.id, account_id: id, viewed_at: new Date().toISOString() }, { onConflict: "user_id,account_id" });
 
   const { runs, totalCount } = await getAccountErrorRuns(id, page);
   const totalPages = Math.max(1, Math.ceil(totalCount / ERROR_RUNS_PAGE_SIZE));

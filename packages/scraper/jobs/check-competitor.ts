@@ -81,6 +81,18 @@ const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 // 0 imóveis capturados, ou a maioria sem preço.
 const DEGRADED_MIN_MISSING_PRICE_RATIO = 0.5;
 
+// Terceiro gatilho de degradação, só pra json_api (totalDeclared é sempre
+// null em html_css, condição fica inerte pra esse caso): capturado muito
+// abaixo do que a própria API declara. Achado real: um config json_api
+// pode ter um limite fixo (ex: linesPerPage) que cobre o catálogo de hoje
+// mas silenciosamente passa a capturar só uma fração se o catálogo crescer
+// — sem essa checagem, isso completaria "com sucesso" (todos os itens
+// capturados têm preço válido, então DEGRADED_MIN_MISSING_PRICE_RATIO
+// nunca dispara) e nunca geraria alerta nenhum. Constante própria (não
+// reaproveita DEGRADED_MIN_MISSING_PRICE_RATIO) — são decisões diferentes,
+// podem precisar de ajuste independente.
+const DEGRADED_MIN_COVERAGE_RATIO = 0.5;
+
 export interface ChangesByType {
   price: number;
   added: number;
@@ -424,14 +436,26 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
   // scraper_runs.
   const errorMessage = totalFailureMessage ?? result?.stoppedEarlyErrorReason ?? null;
 
-  // Extração completou (não foi falha de rede) mas veio vazia ou majoritariamente
-  // sem preço — sinal de seletor obsoleto, não de catálogo esvaziado. Distinto
-  // de stoppedEarlyDueToError (que é sobre não CONSEGUIR extrair), mas tem o
+  // Cobertura baixa contra o total que a própria fonte declara (só
+  // json_api tem esse dado na checagem de rotina — ver totalDeclared em
+  // run-price-check.ts). totalDeclared null (html_css, ou json_api sem
+  // total_field) deixa a condição inerte, não bloqueia por falta de dado.
+  const totalDeclared = result?.totalDeclared ?? null;
+  const looksLowCoverage =
+    totalDeclared !== null && totalDeclared > 0 && propertiesCaptured / totalDeclared < DEGRADED_MIN_COVERAGE_RATIO;
+
+  // Extração completou (não foi falha de rede) mas veio vazia, majoritariamente
+  // sem preço, ou capturou muito menos do que a fonte declara ter — sinal de
+  // seletor obsoleto (ou, no caso de cobertura, de um limite de captura que
+  // ficou pequeno demais), não de catálogo esvaziado. Distinto de
+  // stoppedEarlyDueToError (que é sobre não CONSEGUIR extrair), mas tem o
   // mesmo efeito prático sobre a confiabilidade dos dados desta execução.
   const configLooksDegraded =
     success &&
     !stoppedEarlyDueToError &&
-    (propertiesCaptured === 0 || result!.cardsWithoutPrice / propertiesCaptured >= DEGRADED_MIN_MISSING_PRICE_RATIO);
+    (propertiesCaptured === 0 ||
+      result!.cardsWithoutPrice / propertiesCaptured >= DEGRADED_MIN_MISSING_PRICE_RATIO ||
+      looksLowCoverage);
 
   // Só compara/persiste quando a extração de fato rodou (mesmo que parcial
   // — os imóveis que FORAM capturados continuam válidos pra comparação).
@@ -483,6 +507,8 @@ export async function checkCompetitor(competitorId: string): Promise<CheckCompet
       title: `Concorrente com seletores desatualizados: ${competitor.name}`,
       message: `"${competitor.name}" capturou ${propertiesCaptured} imóveis${
         propertiesCaptured > 0 ? ` (${result!.cardsWithoutPrice} sem preço)` : ""
+      }${
+        looksLowCoverage ? ` — bem abaixo dos ${totalDeclared} declarados pela própria fonte` : ""
       } nesta checagem — provável mudança no site. O config foi marcado como degradado; a recalibração automática via IA vai rodar na próxima varredura (Etapa 7).`,
     });
   }

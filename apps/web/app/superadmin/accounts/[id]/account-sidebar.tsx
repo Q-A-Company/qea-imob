@@ -26,6 +26,26 @@ interface NavItem {
   href: string;
 }
 
+// "configuracoes" acende quando há revisão de site_config pendente
+// (getPendingSiteConfigCount); "erros" acende quando há erro mais novo que a
+// última visita do SuperAdmin a esta aba, nesta conta
+// (getHasNewErrorsForAccount) — some sozinho ao visitar, sem precisar
+// "limpar" nada (pedido explícito do usuário).
+function hasBadge(item: NavItem, hasPendingReview: boolean, hasNewErrors: boolean): boolean {
+  if (item.key === "configuracoes") return hasPendingReview;
+  if (item.key === "erros") return hasNewErrors;
+  return false;
+}
+
+function NavIcon({ icon: Icon, showBadge }: { icon: LucideIcon; showBadge: boolean }) {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <Icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
+      {showBadge && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-erro" aria-hidden="true" />}
+    </span>
+  );
+}
+
 function buildAccountNavItems(accountId: string): NavItem[] {
   const base = `/superadmin/accounts/${accountId}`;
   return [
@@ -65,6 +85,8 @@ export function AccountSidebar({
   fullName,
   avatarUrl,
   role,
+  hasPendingReview,
+  hasNewErrors,
 }: {
   accountId: string;
   pinned: boolean;
@@ -72,6 +94,8 @@ export function AccountSidebar({
   fullName: string | null;
   avatarUrl: string | null;
   role: UserRole;
+  hasPendingReview: boolean;
+  hasNewErrors: boolean;
 }) {
   const pathname = usePathname();
   const items = buildAccountNavItems(accountId);
@@ -119,6 +143,7 @@ export function AccountSidebar({
         <ul className="flex flex-col gap-1 overflow-y-auto overflow-x-hidden px-2">
           {items.map((item) => {
             const active = pathname === item.href;
+            const showBadge = hasBadge(item, hasPendingReview, hasNewErrors);
             return (
               <li key={item.key}>
                 <Link
@@ -128,8 +153,11 @@ export function AccountSidebar({
                     active ? "bg-foreground/5 text-foreground" : "text-muted hover:bg-background hover:text-foreground"
                   }`}
                 >
-                  <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
-                  <span className={labelOpacityClass}>{item.label}</span>
+                  <NavIcon icon={item.icon} showBadge={showBadge} />
+                  <span className={labelOpacityClass}>
+                    {item.label}
+                    {showBadge && <span className="sr-only"> (novo)</span>}
+                  </span>
                 </Link>
               </li>
             );
@@ -151,17 +179,18 @@ export function AccountSidebar({
       >
         {items.map((item) => {
           const active = pathname === item.href;
+          const showBadge = hasBadge(item, hasPendingReview, hasNewErrors);
           return (
             <Link
               key={item.key}
               href={item.href}
-              aria-label={item.label}
+              aria-label={showBadge ? `${item.label} (novo)` : item.label}
               onClick={blurOnMouseClick}
               className={`group/navlink flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
                 active ? "text-signal-text" : "text-muted"
               }`}
             >
-              <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
+              <NavIcon icon={item.icon} showBadge={showBadge} />
               {item.label}
             </Link>
           );

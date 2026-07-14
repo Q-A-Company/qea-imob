@@ -16,6 +16,8 @@ export function AccountShellChrome({
   fullName,
   avatarUrl,
   role,
+  hasPendingReview,
+  hasNewErrors,
   children,
 }: {
   accountId: string;
@@ -23,6 +25,8 @@ export function AccountShellChrome({
   fullName: string | null;
   avatarUrl: string | null;
   role: UserRole;
+  hasPendingReview: boolean;
+  hasNewErrors: boolean;
   children: React.ReactNode;
 }) {
   const [pinned, setPinned] = useState(initialPinned);
@@ -45,6 +49,8 @@ export function AccountShellChrome({
         fullName={fullName}
         avatarUrl={avatarUrl}
         role={role}
+        hasPendingReview={hasPendingReview}
+        hasNewErrors={hasNewErrors}
       />
       <div
         className={`pb-16 transition-[padding-left] duration-200 ease-out md:pb-0 print:pb-0 print:pl-0 ${

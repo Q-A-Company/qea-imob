@@ -15,6 +15,17 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
 }
 
+// Mesma fórmula de register-form.tsx (coverageLabel) — reaproveitada aqui
+// pra mostrar o mesmo número que o Admin já viu no cadastro, agora pro
+// SuperAdmin decidir a aprovação. null em qualquer um dos dois (config
+// gravado antes da coluna cards_found existir, ou site sem total
+// declarado) = cobertura desconhecida, não força um percentual inventado.
+function coverageLabel(cardsFound: number | null, totalListingsHint: number | null): string | null {
+  if (cardsFound === null || totalListingsHint === null) return null;
+  const pct = totalListingsHint === 0 ? 0 : Math.round((cardsFound / totalListingsHint) * 100);
+  return `${cardsFound} de ${totalListingsHint} imóveis capturados (${pct}%)`;
+}
+
 // Aprovar sempre ativa o site_config. Descartar tem DOIS comportamentos
 // diferentes dependendo da origem (ver discardSiteConfigActionForSuperAdmin
 // em lib/competitors/actions.ts, que decide sozinho a partir da version):
@@ -81,6 +92,10 @@ export function PendingSiteConfigReview({ accountId, configs }: { accountId: str
               Estratégia: {STRATEGY_LABEL[config.strategy]} · Confiança:{" "}
               {config.confidenceScore !== null ? `${Math.round(config.confidenceScore * 100)}%` : "não informada"}
             </p>
+            {(() => {
+              const coverage = coverageLabel(config.cardsFound, config.totalListingsHint);
+              return coverage ? <p className="text-xs text-muted">Cobertura: {coverage}</p> : null;
+            })()}
             {config.warnings.length > 0 && (
               <ul className="list-disc pl-4 text-xs text-muted">
                 {config.warnings.map((w) => (

@@ -4,6 +4,7 @@ import type { AnyNode } from "domhandler";
 import type { HtmlCssSiteConfig } from "../ai/site-config-schema.js";
 import type { ExtractedProperty } from "./types.js";
 import { normalizeExternalId } from "./text-utils.js";
+import { parsePriceBR } from "./price-parser.js";
 
 export interface HtmlExtractionResult {
   properties: ExtractedProperty[];
@@ -31,18 +32,6 @@ function readField(
 
   const trimmed = raw?.trim();
   return trimmed ? trimmed : null;
-}
-
-function parsePriceBR(raw: string): number | null {
-  const digitsAndSeparators = raw.replace(/[^\d.,]/g, "");
-  if (!digitsAndSeparators) return null;
-
-  const normalized = digitsAndSeparators.includes(",")
-    ? digitsAndSeparators.replace(/\./g, "").replace(",", ".")
-    : digitsAndSeparators.replace(/\./g, "");
-
-  const value = Number.parseFloat(normalized);
-  return Number.isFinite(value) ? value : null;
 }
 
 function resolveUrl(raw: string, baseUrl: string): string {

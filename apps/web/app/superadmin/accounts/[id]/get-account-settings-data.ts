@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { getPendingSiteConfigCount } from "./get-pending-site-configs";
 
 export interface AccountSettingsData {
   id: string;
@@ -46,19 +47,7 @@ export async function getAccountSettingsData(accountId: string): Promise<Account
   if (usersError) throw new Error(`Falha ao contar usuários: ${usersError.message}`);
   if (notificationError) throw new Error(`Falha ao buscar notification_settings: ${notificationError.message}`);
 
-  const { data: competitorIdsRows } = await supabase.from("competitors").select("id").eq("account_id", accountId);
-  const competitorIds = (competitorIdsRows ?? []).map((c) => c.id);
-
-  let pendingReviewCount = 0;
-  if (competitorIds.length > 0) {
-    const { count, error: pendingError } = await supabase
-      .from("site_configs")
-      .select("id", { count: "exact", head: true })
-      .in("competitor_id", competitorIds)
-      .eq("status", "pendente_revisao");
-    if (pendingError) throw new Error(`Falha ao buscar configs pendentes: ${pendingError.message}`);
-    pendingReviewCount = count ?? 0;
-  }
+  const pendingReviewCount = await getPendingSiteConfigCount(accountId);
 
   return {
     id: account.id,

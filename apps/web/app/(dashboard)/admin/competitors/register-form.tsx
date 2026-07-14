@@ -5,6 +5,7 @@ import {
   registerCompetitorAction,
   confirmSiteConfigAction,
   discardSiteConfigAction,
+  sendToSuperAdminAction,
   type RegisterCompetitorState,
 } from "@/lib/competitors/actions";
 
@@ -29,8 +30,15 @@ export function RegisterCompetitorForm() {
   const [state, formAction, pending] = useActionState(registerCompetitorAction, initialState);
   const [isResolving, startTransition] = useTransition();
   const [resolvedSiteConfigId, setResolvedSiteConfigId] = useState<string | null>(null);
-  const [lastAction, setLastAction] = useState<"confirmed" | "discarded" | null>(null);
+  const [lastAction, setLastAction] = useState<"confirmed" | "discarded" | "sent" | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  // Distinto de resolvedSiteConfigId: marca que o clique em "ENVIAR PARA O
+  // SUPERADMIN" já disparou a notificação (sempre dispara, sem diálogo de
+  // confirmação no meio) — a revisão continua na tela até o Admin clicar
+  // "Entendido!", que é quem de fato encerra esta prévia (mesma mecânica de
+  // resolvedSiteConfigId/lastAction usada por confirmar/descartar).
+  const [sentSiteConfigId, setSentSiteConfigId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // state.learning fica "preso" no retorno da última chamada de
   // registerCompetitorAction até o form ser submetido de novo — comparar
@@ -67,6 +75,23 @@ export function RegisterCompetitorForm() {
     });
   }
 
+  function handleSend() {
+    if (!state.learning) return;
+    setSendError(null);
+    const { siteConfigId } = state.learning;
+    startTransition(async () => {
+      const result = await sendToSuperAdminAction(siteConfigId);
+      if (result.error) setSendError(result.error);
+      else setSentSiteConfigId(siteConfigId);
+    });
+  }
+
+  function handleAcknowledgeSent() {
+    if (!state.learning) return;
+    setResolvedSiteConfigId(state.learning.siteConfigId);
+    setLastAction("sent");
+  }
+
   if (pendingReview && state.learning) {
     return (
       <div className="flex flex-col gap-4 rounded-lg border border-surface-border bg-surface p-5">
@@ -88,6 +113,21 @@ export function RegisterCompetitorForm() {
           )}
         </div>
 
+        {state.learning.requiresSuperAdminApproval && state.learning.siteConfigId !== sentSiteConfigId && (
+          <p className="rounded-md border border-erro/30 bg-erro/10 px-3 py-2 text-xs text-erro-texto" role="alert">
+            Cobertura muito baixa ({coverageLabel(state.learning.cardsFound, state.learning.totalListingsHint)}) — esse
+            cadastro precisa da aprovação de um SuperAdmin antes de ativar. Clique em &quot;ENVIAR PARA O SUPERADMIN&quot;
+            pra pedir a revisão, ou descarte pra tentar de novo com outra URL/estratégia.
+          </p>
+        )}
+
+        {state.learning.requiresSuperAdminApproval && state.learning.siteConfigId === sentSiteConfigId && (
+          <p className="rounded-md border border-sucesso/30 bg-sucesso/10 px-3 py-2 text-xs text-sucesso-texto" role="status">
+            Enviado! Um SuperAdmin foi avisado e vai revisar este cadastro. Aguarde a aprovação (você vai ser avisado) —
+            não dá pra recadastrar esta URL enquanto isso, a menos que descarte este cadastro.
+          </p>
+        )}
+
         {state.learning.paginationDetectedWithoutTotal && (
           <p className="rounded-md border border-erro/30 bg-erro/10 px-3 py-2 text-xs text-erro-texto" role="alert">
             Não sabemos o total real de imóveis do site, mas ele tem paginação (mais páginas além da 1ª) — esta prévia
@@ -101,24 +141,54 @@ export function RegisterCompetitorForm() {
             {resolveError}
           </p>
         )}
+        {sendError && (
+          <p className="text-sm text-erro-texto" role="alert">
+            {sendError}
+          </p>
+        )}
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={isResolving}
-            className="rounded-md bg-signal px-4 py-2 text-sm font-semibold text-signal-on hover:opacity-90 disabled:opacity-60"
-          >
-            {isResolving ? "Aguarde..." : "Confirmar e ativar"}
-          </button>
-          <button
-            type="button"
-            onClick={handleDiscard}
-            disabled={isResolving}
-            className="text-sm text-muted hover:underline disabled:opacity-60"
-          >
-            Descartar e tentar de novo
-          </button>
+          {!state.learning.requiresSuperAdminApproval && (
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isResolving}
+              className="rounded-md bg-signal px-4 py-2 text-sm font-semibold text-signal-on hover:opacity-90 disabled:opacity-60"
+            >
+              {isResolving ? "Aguarde..." : "Confirmar e ativar"}
+            </button>
+          )}
+
+          {state.learning.requiresSuperAdminApproval && state.learning.siteConfigId === sentSiteConfigId ? (
+            <button
+              type="button"
+              onClick={handleAcknowledgeSent}
+              className="rounded-md bg-signal px-4 py-2 text-sm font-semibold text-signal-on hover:opacity-90"
+            >
+              Entendido!
+            </button>
+          ) : (
+            <>
+              {state.learning.requiresSuperAdminApproval && (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={isResolving}
+                  className="rounded-md bg-erro px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {isResolving ? "Aguarde..." : "ENVIAR PARA O SUPERADMIN"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleDiscard}
+                disabled={isResolving}
+                className="text-sm text-muted hover:underline disabled:opacity-60"
+              >
+                Descartar e tentar de novo
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -184,6 +254,12 @@ export function RegisterCompetitorForm() {
       {justResolved && lastAction === "discarded" && (
         <p className="text-sm text-muted" role="status">
           Cadastro descartado. Pode tentar de novo, com outra URL.
+        </p>
+      )}
+      {justResolved && lastAction === "sent" && (
+        <p className="text-sm text-sucesso-texto" role="status">
+          Enviado para o SuperAdmin — aguarde a aprovação antes de tentar recadastrar esta URL. Enquanto isso, o
+          concorrente não aparece na lista abaixo (ele só passa a existir de verdade depois de aprovado).
         </p>
       )}
     </form>

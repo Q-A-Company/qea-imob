@@ -28,6 +28,12 @@ export interface PaginatedExtractionResult {
     | "all_duplicates"
     | "max_pages"
     | "pagination_type_unsupported";
+  // Motivo real da falha, só preenchido quando stoppedReason === "fetch_failed"
+  // — status HTTP (ex: "HTTP 500") ou mensagem de exceção de rede/timeout.
+  // Propagado até RunPriceCheckResult.stoppedEarlyErrorReason →
+  // scraper_runs.error_message, mesmo caminho que já existia pro json_api
+  // (JsonApiExtractionResult.stoppedEarlyErrorReason).
+  stoppedEarlyErrorReason: string | null;
 }
 
 const MAX_PAGES = 300;
@@ -54,23 +60,35 @@ interface PageFetchResult {
   // (pausa automática após 3 checagens) e desligando pra sempre a inferência
   // de "possivelmente vendido" (que exige stopped_early_due_to_error=false).
   notFound: boolean;
+  // Motivo real da falha definitiva (esgotou os retries) — null quando html
+  // não é null, ou quando notFound é true (fim natural da paginação, não é
+  // uma falha real). Mesmo padrão de FetchJsonResult.errorReason em
+  // json-api-extractor.ts (fetchJsonWithRetry) — antes disso existir aqui,
+  // esse caminho (página 2+ do html_css) tinha o MESMO gap que o json_api já
+  // teve corrigido: o status HTTP/mensagem real do erro era descartado
+  // dentro do catch, nunca chegava até scraper_runs.error_message.
+  errorReason: string | null;
 }
 
 async function fetchHtmlWithRetry(url: string): Promise<PageFetchResult> {
+  let lastErrorReason: string | null = null;
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const { html } = await fetchListingHtml(url);
-      return { html, notFound: false };
+      return { html, notFound: false, errorReason: null };
     } catch (err) {
       if (err instanceof HttpStatusError && err.status === 404) {
-        return { html: null, notFound: true };
+        return { html: null, notFound: true, errorReason: null };
       }
       // outro erro (5xx, timeout, rede) — pode ser transitório, tenta de
-      // novo com backoff.
+      // novo com backoff, mas guarda a mensagem real caso essa seja a
+      // última tentativa (mesmo raciocínio de fetchJsonWithRetry).
+      lastErrorReason = err instanceof HttpStatusError ? `HTTP ${err.status}` : err instanceof Error ? err.message : String(err);
     }
     if (attempt < MAX_RETRIES) await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
   }
-  return { html: null, notFound: false };
+  return { html: null, notFound: false, errorReason: lastErrorReason };
 }
 
 // Acha, dentro do HTML da página 1, os links reais para as páginas 2 e 3 da
@@ -155,16 +173,33 @@ export async function extractAllPagesFromHtml(params: {
       cardsWithoutPrice,
       cardsWithoutExternalId,
       stoppedReason: config.pagination.type === "none" ? "no_more_pages" : "pagination_type_unsupported",
+      stoppedEarlyErrorReason: null,
     };
   }
 
   for (let page = 2; page <= MAX_PAGES; page++) {
-    const { html, notFound } = await fetchHtmlWithRetry(buildPageUrl(page));
+    const { html, notFound, errorReason } = await fetchHtmlWithRetry(buildPageUrl(page));
     if (notFound) {
-      return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "no_more_pages" };
+      return {
+        properties,
+        pagesFetched,
+        duplicateExternalIds,
+        cardsWithoutPrice,
+        cardsWithoutExternalId,
+        stoppedReason: "no_more_pages",
+        stoppedEarlyErrorReason: null,
+      };
     }
     if (html === null) {
-      return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "fetch_failed" };
+      return {
+        properties,
+        pagesFetched,
+        duplicateExternalIds,
+        cardsWithoutPrice,
+        cardsWithoutExternalId,
+        stoppedReason: "fetch_failed",
+        stoppedEarlyErrorReason: errorReason,
+      };
     }
 
     const pageResult = extractFromHtml(html, config, firstPageUrl);
@@ -173,7 +208,15 @@ export async function extractAllPagesFromHtml(params: {
     cardsWithoutExternalId += pageResult.cardsWithoutExternalId;
 
     if (pageResult.properties.length === 0) {
-      return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "no_more_pages" };
+      return {
+        properties,
+        pagesFetched,
+        duplicateExternalIds,
+        cardsWithoutPrice,
+        cardsWithoutExternalId,
+        stoppedReason: "no_more_pages",
+        stoppedEarlyErrorReason: null,
+      };
     }
 
     let newCount = 0;
@@ -188,11 +231,27 @@ export async function extractAllPagesFromHtml(params: {
     }
 
     if (newCount === 0) {
-      return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "all_duplicates" };
+      return {
+        properties,
+        pagesFetched,
+        duplicateExternalIds,
+        cardsWithoutPrice,
+        cardsWithoutExternalId,
+        stoppedReason: "all_duplicates",
+        stoppedEarlyErrorReason: null,
+      };
     }
 
     await sleep(DELAY_BETWEEN_PAGES_MS);
   }
 
-  return { properties, pagesFetched, duplicateExternalIds, cardsWithoutPrice, cardsWithoutExternalId, stoppedReason: "max_pages" };
+  return {
+    properties,
+    pagesFetched,
+    duplicateExternalIds,
+    cardsWithoutPrice,
+    cardsWithoutExternalId,
+    stoppedReason: "max_pages",
+    stoppedEarlyErrorReason: null,
+  };
 }

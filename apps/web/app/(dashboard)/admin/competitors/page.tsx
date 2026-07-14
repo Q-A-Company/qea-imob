@@ -69,9 +69,36 @@ export default async function CompetitorsPage() {
     throw new Error(`Falha ao carregar concorrentes: ${error.message}`);
   }
 
+  const competitorIds = (competitors ?? []).map((c) => c.id);
+
+  // Cadastro novo cuja única config está pendente_revisao (aguardando o
+  // Admin confirmar, enviar ao SuperAdmin, ou o SuperAdmin decidir) não pode
+  // aparecer como "cadastrado" na lista principal — pedido do usuário,
+  // depois de perceber que a tela mostrava "Ativo" pra um concorrente que na
+  // prática ainda não roda checagem nenhuma. Diferente de uma recalibração
+  // pendente (version > 1) de um concorrente que JÁ tem um site_config
+  // ativo — esse continua aparecendo normalmente, com histórico real rodando.
+  const { data: siteConfigs, error: siteConfigsError } = await supabase
+    .from("site_configs")
+    .select("competitor_id, version, status")
+    .in("competitor_id", competitorIds);
+  if (siteConfigsError) throw new Error(`Falha ao carregar configurações de site: ${siteConfigsError.message}`);
+
+  const hasActiveConfig = new Set<string>();
+  const hasPendingFreshConfig = new Set<string>();
+  for (const sc of siteConfigs ?? []) {
+    if (sc.status === "ativo") hasActiveConfig.add(sc.competitor_id);
+    if (sc.version === 1 && sc.status === "pendente_revisao") hasPendingFreshConfig.add(sc.competitor_id);
+  }
+  const awaitingApprovalIds = new Set(
+    (competitors ?? []).filter((c) => hasPendingFreshConfig.has(c.id) && !hasActiveConfig.has(c.id)).map((c) => c.id)
+  );
+
+  const visibleCompetitors = (competitors ?? []).filter((c) => !awaitingApprovalIds.has(c.id));
+
   const minIntervalById = await getMinIntervalByCompetitorId(
     supabase,
-    (competitors ?? []).map((c) => c.id)
+    visibleCompetitors.map((c) => c.id)
   );
 
   return (
@@ -83,8 +110,16 @@ export default async function CompetitorsPage() {
 
       <RegisterCompetitorForm />
 
+      {awaitingApprovalIds.size > 0 && (
+        <p className="text-xs text-muted" role="status">
+          {awaitingApprovalIds.size === 1
+            ? "1 cadastro aguardando aprovação de um SuperAdmin não aparece na lista abaixo até a revisão."
+            : `${awaitingApprovalIds.size} cadastros aguardando aprovação de um SuperAdmin não aparecem na lista abaixo até a revisão.`}
+        </p>
+      )}
+
       <CompetitorsList
-        competitors={(competitors ?? []).map((c) => ({
+        competitors={visibleCompetitors.map((c) => ({
           id: c.id,
           name: c.name,
           abbreviation: c.abbreviation,

@@ -1,0 +1,14 @@
+-- Persiste quantos imóveis o aprendizado (cadastro ou recalibração) capturou
+-- de verdade — hoje só existia em memória (learned.stats.cardsFound),
+-- nunca gravado em site_configs. Necessário pra dois usos novos:
+--  1. Gate de qualidade no cadastro: confirmSiteConfigAction recalcula a
+--     cobertura (cards_found / total_listings_hint, este último já
+--     guardado dentro de selectors jsonb) no servidor antes de deixar o
+--     Admin da própria conta ativar um site_config version=1 — não
+--     confia num booleano pré-computado, calcula a partir do número bruto
+--     pra continuar correto mesmo se o limite de cobertura mudar depois.
+--  2. Tela de revisão do SuperAdmin (pending-site-config-review.tsx): hoje
+--     não mostra cobertura nenhuma, só confiança/warnings.
+-- Nullable — site_configs já existentes (gravados antes desta mudança)
+-- não têm esse dado retroativamente disponível.
+alter table public.site_configs add column cards_found integer;

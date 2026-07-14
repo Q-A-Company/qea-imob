@@ -71,3 +71,38 @@ export async function getAccountErrorRuns(accountId: string, page: number): Prom
     totalCount: count ?? 0,
   };
 }
+
+// Badge "erro novo" da nav (account-sidebar.tsx) — some quando o SuperAdmin
+// visita a aba de erros (errors/page.tsx grava viewed_at nesse momento), sem
+// precisar "limpar" nada explicitamente (pedido do usuário: por usuário+
+// conta, não um simples count>0 global). Sem linha em
+// superadmin_error_report_views ainda (nunca visitou) = qualquer erro já
+// acende o aviso.
+export async function getHasNewErrorsForAccount(userId: string, accountId: string): Promise<boolean> {
+  const supabase = await createClient();
+
+  const { data: competitors, error: competitorsError } = await supabase.from("competitors").select("id").eq("account_id", accountId);
+  if (competitorsError) throw new Error(`Falha ao buscar concorrentes: ${competitorsError.message}`);
+  const competitorIds = (competitors ?? []).map((c) => c.id);
+  if (competitorIds.length === 0) return false;
+
+  const { data: viewRow, error: viewError } = await supabase
+    .from("superadmin_error_report_views")
+    .select("viewed_at")
+    .eq("user_id", userId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (viewError) throw new Error(`Falha ao buscar última visita ao relatório de erros: ${viewError.message}`);
+
+  let query = supabase
+    .from("scraper_runs")
+    .select("id", { count: "exact", head: true })
+    .in("competitor_id", competitorIds)
+    .or("success.eq.false,stopped_early_due_to_error.eq.true");
+  if (viewRow) {
+    query = query.gt("created_at", viewRow.viewed_at);
+  }
+  const { count, error } = await query;
+  if (error) throw new Error(`Falha ao checar erros novos: ${error.message}`);
+  return (count ?? 0) > 0;
+}

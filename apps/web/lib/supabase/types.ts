@@ -125,6 +125,18 @@ export interface Database {
           version: number;
           confidence_score: number | null;
           status: SiteConfigStatus;
+          // Quantos imóveis o aprendizado (cadastro ou recalibração) capturou
+          // de verdade — null pra site_configs gravados antes desta coluna
+          // existir. Usado pra recalcular cobertura (junto com
+          // total_listings_hint, que já mora dentro de selectors) no gate de
+          // qualidade do cadastro e na tela de revisão do SuperAdmin.
+          cards_found: number | null;
+          // Quando o Admin clicou "Enviar para o SuperAdmin" num cadastro de
+          // cobertura baixa (version=1) — null até esse clique acontecer,
+          // mesmo com status já 'pendente_revisao'. Recalibração incompatível
+          // (version>1) não usa este campo, continua aparecendo pro
+          // SuperAdmin automaticamente como sempre.
+          sent_to_superadmin_at: string | null;
           last_validated_at: string | null;
           created_at: string;
         };
@@ -135,6 +147,8 @@ export interface Database {
           version?: number;
           confidence_score?: number | null;
           status?: SiteConfigStatus;
+          cards_found?: number | null;
+          sent_to_superadmin_at?: string | null;
           last_validated_at?: string | null;
           created_at?: string;
         };
@@ -359,6 +373,19 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
+      } & NoRelationships;
+      superadmin_error_report_views: {
+        Row: {
+          user_id: string;
+          account_id: string;
+          viewed_at: string;
+        };
+        Insert: {
+          user_id: string;
+          account_id: string;
+          viewed_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["superadmin_error_report_views"]["Insert"]>;
       } & NoRelationships;
     };
     Views: Record<string, never>;
