@@ -1,7 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/forgot-password", "/reset-password"]);
+// /termos e /privacidade precisam ser lidos por qualquer um, mesmo
+// deslogado (linkados no rodapé do /login) — sem entrar aqui, o Proxy
+// bloqueava ANTES da página em si rodar, redirecionando pra /login mesmo
+// pra quem só queria ler o texto. /aceitar-termos fica de fora de
+// propósito: não faz sentido aceitar termos sem estar logado (precisa
+// saber QUEM está aceitando).
+const PUBLIC_PATHS = new Set(["/login", "/forgot-password", "/reset-password", "/termos", "/privacidade"]);
 
 // Checagem otimista: só confirma se existe usuário autenticado (via
 // getUser(), que revalida o JWT) e redireciona para /login quando não há.

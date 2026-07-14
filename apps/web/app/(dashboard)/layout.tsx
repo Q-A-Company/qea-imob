@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/dal";
+import { requireAcceptedTerms } from "@/lib/legal/terms-gate";
 import { DashboardChrome } from "./dashboard-chrome";
 import { getNotificationBellData } from "./notification-bell";
 
@@ -10,6 +11,12 @@ import { getNotificationBellData } from "./notification-bell";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
+
+  // Este layout não passa por requireRole() (não restringe papel, só
+  // exige "algum" usuário logado) — por isso repete aqui a mesma checagem
+  // de aceite de termos que requireRole() já faz, senão as páginas dentro
+  // de (dashboard)/ ficariam sem esse gate.
+  await requireAcceptedTerms(profile.id);
 
   // Mesmo padrão do cookie "theme" em app/layout.tsx: decidido no servidor,
   // sem script anti-flash — isso só define o valor INICIAL (evita flash no

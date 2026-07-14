@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireAcceptedTerms } from "@/lib/legal/terms-gate";
 import type { UserRole } from "@/lib/supabase/types";
 
 export interface Profile {
@@ -64,6 +65,10 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 export async function requireRole(role: UserRole | UserRole[]): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/login");
+
+  // Antes do check de papel, de propósito — não importa qual destino o
+  // usuário pretendia acessar, um aceite pendente sempre vem na frente.
+  await requireAcceptedTerms(profile.id);
 
   const allowed = Array.isArray(role) ? role : [role];
   if (!allowed.includes(profile.role)) {

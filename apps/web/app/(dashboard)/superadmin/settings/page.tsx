@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { AppearanceThemeToggle } from "../../admin/settings/appearance-theme-toggle";
+import { LegalLinksSection } from "../../legal-links-section";
 
 // Configuração PESSOAL do SuperAdmin — distinta de /superadmin/system
 // (config global da plataforma). Só Aparência por enquanto: SuperAdmin não
@@ -22,6 +23,8 @@ export default async function SuperAdminSettingsPage() {
         </div>
         <AppearanceThemeToggle />
       </section>
+
+      <LegalLinksSection />
     </div>
   );
 }

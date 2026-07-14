@@ -6,6 +6,7 @@ import { PersonalEmailPreferenceToggle } from "./personal-email-preference-toggl
 import { AppearanceThemeToggle } from "./appearance-theme-toggle";
 import { ClearHistoryButton } from "./clear-history-button";
 import { IconChip } from "../../icon-chip";
+import { LegalLinksSection } from "../../legal-links-section";
 
 export default async function SettingsPage() {
   const profile = await requireRole(["admin", "gerente"]);
@@ -52,6 +53,8 @@ export default async function SettingsPage() {
         </div>
         <AppearanceThemeToggle />
       </section>
+
+      <LegalLinksSection />
 
       {/* Só Diretor/T.I (não Gerente) — decidido explicitamente com o
           usuário, dado o tamanho do impacto (conta inteira, irreversível).

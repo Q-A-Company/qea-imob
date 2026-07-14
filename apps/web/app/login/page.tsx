@@ -31,6 +31,18 @@ export default async function LoginPage() {
         <p className="mt-2 text-center text-xs text-muted">
           Por segurança, os acessos a este sistema são registrados (IP, dispositivo e horário).
         </p>
+        {/* Rodapé permanente pedido explicitamente — mesmos links da tela de
+            aceite obrigatório (/aceitar-termos) e de Configurações, só que
+            aqui sempre visível, mesmo antes de logar. */}
+        <p className="mt-4 flex items-center justify-center gap-3 text-center text-xs text-muted">
+          <a href="/termos" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Termos de Uso
+          </a>
+          <span aria-hidden>·</span>
+          <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="hover:underline">
+            Política de Privacidade
+          </a>
+        </p>
       </div>
     </main>
   );

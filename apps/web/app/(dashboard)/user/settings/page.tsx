@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { PersonalEmailPreferenceToggle } from "../../admin/settings/personal-email-preference-toggle";
 import { AppearanceThemeToggle } from "../../admin/settings/appearance-theme-toggle";
+import { LegalLinksSection } from "../../legal-links-section";
 
 // Mirror de /admin/settings (Etapa 11, mesmo padrão) — mas só a
 // preferência pessoal. Corretor não gerencia os canais da conta (isso é
@@ -30,6 +31,8 @@ export default async function UserSettingsPage() {
         </div>
         <AppearanceThemeToggle />
       </section>
+
+      <LegalLinksSection />
     </div>
   );
 }

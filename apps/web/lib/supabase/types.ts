@@ -18,6 +18,7 @@ export type PriceStatus = "valor" | "sob_consulta";
 export type PropertyStatus = "ativo" | "possivelmente_vendido";
 export type ScraperRunType = "checagem" | "recalibracao";
 export type PropertyChangeType = "price" | "added" | "removed" | "reappeared";
+export type LegalDocumentType = "termos" | "privacidade";
 
 // postgrest-js exige que cada tabela tenha `Relationships` e que o schema
 // tenha `Views`/`Functions` (mesmo vazios) para resolver a inferência de
@@ -386,6 +387,23 @@ export interface Database {
           viewed_at: string;
         };
         Update: Partial<Database["public"]["Tables"]["superadmin_error_report_views"]["Insert"]>;
+      } & NoRelationships;
+      terms_acceptance: {
+        Row: {
+          id: string;
+          user_id: string;
+          document_type: LegalDocumentType;
+          version: string;
+          accepted_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          document_type: LegalDocumentType;
+          version: string;
+          accepted_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["terms_acceptance"]["Insert"]>;
       } & NoRelationships;
     };
     Views: Record<string, never>;
