@@ -124,7 +124,7 @@ export function AccountSidebar({
             {/* Sem whitespace-nowrap de propósito — ver comentário equivalente
                 em (dashboard)/sidebar.tsx. */}
             <p className={`text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
-              Acompanhe seus concorrentes em tempo real!
+              Uma solução da Q&A Company.
             </p>
           </div>
           <IconButton

@@ -141,7 +141,7 @@ export function Sidebar({
                 linhas em vez de estourar e ficar cortada pelo overflow-hidden
                 do nav. */}
             <p className={`text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
-              Acompanhe seus concorrentes em tempo real!
+              Uma solução da Q&A Company.
             </p>
           </div>
           <IconButton
