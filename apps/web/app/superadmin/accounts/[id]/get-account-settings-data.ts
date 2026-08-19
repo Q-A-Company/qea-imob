@@ -9,6 +9,7 @@ export interface AccountSettingsData {
   createdAt: string;
   internalNotes: string | null;
   maxCompetitors: number | null;
+  accessExpiresAt: string | null;
   competitorsCount: number;
   usersCount: number;
   pendingReviewCount: number;
@@ -29,7 +30,7 @@ export async function getAccountSettingsData(accountId: string): Promise<Account
 
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .select("id, name, active, created_at, internal_notes, max_competitors")
+    .select("id, name, active, created_at, internal_notes, max_competitors, access_expires_at")
     .eq("id", accountId)
     .maybeSingle();
   if (accountError) throw new Error(`Falha ao buscar conta: ${accountError.message}`);
@@ -57,6 +58,7 @@ export async function getAccountSettingsData(accountId: string): Promise<Account
     createdAt: account.created_at,
     internalNotes: account.internal_notes,
     maxCompetitors: account.max_competitors,
+    accessExpiresAt: account.access_expires_at,
     competitorsCount: competitorsCount ?? 0,
     usersCount: usersCount ?? 0,
     pendingReviewCount,

@@ -51,6 +51,11 @@ export interface Database {
           // registerCompetitorAction e na reativação de um arquivado
           // (lib/competitors/actions.ts), não só decorativo aqui.
           max_competitors: number | null;
+          // Até quando a conta pode acessar a Plataforma — null = sem
+          // expiração. Enforced em lib/auth/actions.ts (login) e
+          // lib/auth/dal.ts (getProfile), além da função SQL
+          // current_account_id() (migration 0029) como rede de segurança.
+          access_expires_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -59,6 +64,7 @@ export interface Database {
           active?: boolean;
           internal_notes?: string | null;
           max_competitors?: number | null;
+          access_expires_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;

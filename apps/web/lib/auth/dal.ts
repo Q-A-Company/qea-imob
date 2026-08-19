@@ -55,8 +55,18 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   // este check, uma conta desativada pelo SuperAdmin continuaria
   // acessando normalmente. superadmin nunca tem account_id, pula o check.
   if (profile.account_id) {
-    const { data: account } = await supabase.from("accounts").select("active").eq("id", profile.account_id).single();
+    const { data: account } = await supabase
+      .from("accounts")
+      .select("active, access_expires_at")
+      .eq("id", profile.account_id)
+      .single();
     if (!account?.active) return null;
+    // Mesmo raciocínio, gatilho diferente (migration 0029) — uma sessão já
+    // aberta quando a expiração vence precisa parar de funcionar no
+    // próximo request, igual accounts.active. lib/auth/actions.ts (login)
+    // tem a mesma condição, com mensagem específica pra quem ainda nem
+    // conseguiu entrar.
+    if (account.access_expires_at && new Date(account.access_expires_at) <= new Date()) return null;
   }
 
   return profile;

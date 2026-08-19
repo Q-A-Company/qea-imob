@@ -5,6 +5,7 @@ export interface AccountListItem {
   id: string;
   name: string;
   active: boolean;
+  accessExpiresAt: string | null;
   createdAt: string;
   competitorsCount: number;
   usersCount: number;
@@ -22,7 +23,7 @@ export interface AccountListFilters {
 export async function getAccountsData(filters: AccountListFilters): Promise<AccountListItem[]> {
   const supabase = await createClient();
 
-  let accountsQuery = supabase.from("accounts").select("id, name, active, created_at").order("name");
+  let accountsQuery = supabase.from("accounts").select("id, name, active, access_expires_at, created_at").order("name");
   if (filters.status !== "todos") accountsQuery = accountsQuery.eq("active", filters.status === "ativo");
   if (filters.search) accountsQuery = accountsQuery.ilike("name", `%${filters.search}%`);
 
@@ -52,6 +53,7 @@ export async function getAccountsData(filters: AccountListFilters): Promise<Acco
     id: a.id,
     name: a.name,
     active: a.active,
+    accessExpiresAt: a.access_expires_at,
     createdAt: a.created_at,
     competitorsCount: competitorCounts.get(a.id) ?? 0,
     usersCount: userCounts.get(a.id) ?? 0,

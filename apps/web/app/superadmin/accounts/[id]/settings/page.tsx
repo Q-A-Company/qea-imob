@@ -7,6 +7,7 @@ import { DeleteAccountButton } from "../delete-account-button";
 import { AccountNameEditor } from "../account-name-editor";
 import { AccountNotesEditor } from "../account-notes-editor";
 import { MaxCompetitorsEditor } from "../max-competitors-editor";
+import { AccountExpirationEditor } from "../account-expiration-editor";
 import { PendingSiteConfigReview } from "../pending-site-config-review";
 
 function formatDateTime(value: string): string {
@@ -53,6 +54,8 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
       <AccountNameEditor accountId={data.id} initialName={data.name} />
 
       <MaxCompetitorsEditor accountId={data.id} initialValue={data.maxCompetitors} />
+
+      <AccountExpirationEditor accountId={data.id} initialAccessExpiresAt={data.accessExpiresAt} />
 
       <AccountNotesEditor accountId={data.id} initialNotes={data.internalNotes} />
 

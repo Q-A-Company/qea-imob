@@ -8,6 +8,7 @@ import type { UserRole } from "@/lib/supabase/types";
 import { BAN_FOREVER, buildProfileUpdateDetails, generateTempPassword, wouldRemoveLastAdmin } from "@/lib/users/shared";
 import type { CreateUserState } from "@/lib/users/types";
 import { logAuditEvent } from "@/lib/audit/log";
+import { computeExpiresAt, type ExpirationChoice } from "@/lib/accounts/expiration";
 
 // Confirma que o profile pertence à conta antes de qualquer mutação — a
 // Admin API do Supabase Auth não sabe nada de account_id, então sem isso um
@@ -103,6 +104,33 @@ export async function updateMaxCompetitorsAction(accountId: string, maxCompetito
     details: { oldValue: current?.max_competitors ?? null, newValue: maxCompetitors },
   });
   revalidatePath(`/superadmin/accounts/${accountId}/settings`);
+  return { success: true };
+}
+
+// choice sempre define a expiração a partir de AGORA (decisão confirmada
+// com o usuário: nunca soma em cima da data antiga, mesmo que ainda falte
+// tempo — mais fácil de prever do que lógica de "crédito"). { kind: "none" }
+// remove a expiração (accessExpiresAt vira null).
+export async function updateAccountExpirationAction(accountId: string, choice: ExpirationChoice): Promise<ActionState> {
+  const viewer = await requireRole("superadmin");
+  const accessExpiresAt = computeExpiresAt(choice);
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("accounts").select("access_expires_at").eq("id", accountId).maybeSingle();
+
+  const { error } = await supabase.from("accounts").update({ access_expires_at: accessExpiresAt }).eq("id", accountId);
+  if (error) return { error: `Falha ao atualizar tempo de acesso: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "account_expiration_changed",
+    targetType: "account",
+    targetId: accountId,
+    details: { oldValue: current?.access_expires_at ?? null, newValue: accessExpiresAt, choice },
+  });
+  revalidatePath(`/superadmin/accounts/${accountId}/settings`);
+  revalidatePath("/superadmin");
   return { success: true };
 }
 

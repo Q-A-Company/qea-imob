@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import { createAccountAction } from "./actions";
 import type { CreateAccountState } from "@/lib/accounts/types";
 import { MaxCompetitorsChoice } from "../../max-competitors-choice";
+import { AccountExpirationChoice } from "../../account-expiration-choice";
+import type { ExpirationChoice } from "@/lib/accounts/expiration";
 
 const initialState: CreateAccountState = {};
 
@@ -20,6 +22,10 @@ export function CreateAccountForm() {
   // hoje (max_competitors null); o SuperAdmin escolhe um teto explícito se
   // quiser, aqui ou depois em Configurações.
   const [maxCompetitors, setMaxCompetitors] = useState<number | null>(null);
+  // 1 mês por padrão — diferente do limite de concorrentes (que nasce sem
+  // limite), aqui força uma escolha consciente: pra deixar sem expiração
+  // de propósito, o SuperAdmin precisa trocar explicitamente pra essa opção.
+  const [expiration, setExpiration] = useState<ExpirationChoice>({ kind: "months", months: 1 });
 
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
@@ -54,6 +60,16 @@ export function CreateAccountForm() {
           <span className="text-xs font-medium text-muted">Máximo de concorrentes</span>
           <MaxCompetitorsChoice value={maxCompetitors} onChange={setMaxCompetitors} />
           <input type="hidden" name="maxCompetitors" value={maxCompetitors === null ? "" : String(maxCompetitors)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted">Tempo de acesso</span>
+          <AccountExpirationChoice value={expiration} onChange={setExpiration} />
+          <input type="hidden" name="expirationKind" value={expiration.kind} />
+          <input
+            type="hidden"
+            name="expirationAmount"
+            value={expiration.kind === "months" ? expiration.months : expiration.kind === "days" ? expiration.days : ""}
+          />
         </div>
         <button
           type="submit"

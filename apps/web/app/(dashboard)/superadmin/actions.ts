@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generateTempPassword } from "@/lib/users/shared";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { CreateAccountState } from "@/lib/accounts/types";
+import { computeExpiresAt, parseExpirationChoice } from "@/lib/accounts/expiration";
 
 // Cria uma conta nova (imobiliária) do zero + o primeiro Admin dela, no
 // mesmo fluxo — sem nenhum usuário, a conta ficaria criada mas ninguém
@@ -27,6 +28,10 @@ export async function createAccountAction(_prevState: CreateAccountState, formDa
   // mesmo tratamento do MaxCompetitorsEditor (superadmin/accounts/[id]/).
   const maxCompetitorsRaw = String(formData.get("maxCompetitors") ?? "").trim();
   const maxCompetitors = maxCompetitorsRaw === "" ? null : Number(maxCompetitorsRaw);
+  const { choice: expirationChoice, error: expirationError } = parseExpirationChoice(
+    formData.get("expirationKind"),
+    formData.get("expirationAmount")
+  );
 
   if (!accountName) return { error: "Nome da imobiliária é obrigatório" };
   if (!adminFullName) return { error: "Nome do administrador é obrigatório" };
@@ -34,12 +39,14 @@ export async function createAccountAction(_prevState: CreateAccountState, formDa
   if (maxCompetitors !== null && (!Number.isInteger(maxCompetitors) || maxCompetitors <= 0)) {
     return { error: "Máximo de concorrentes precisa ser um número inteiro positivo, ou vazio para sem limite" };
   }
+  if (expirationError || !expirationChoice) return { error: expirationError ?? "Tempo de acesso inválido" };
+  const accessExpiresAt = computeExpiresAt(expirationChoice);
 
   const supabase = createServiceClient();
 
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .insert({ name: accountName, active: true, max_competitors: maxCompetitors })
+    .insert({ name: accountName, active: true, max_competitors: maxCompetitors, access_expires_at: accessExpiresAt })
     .select("id")
     .single();
   if (accountError || !account) return { error: `Falha ao criar conta: ${accountError?.message ?? "erro desconhecido"}` };
@@ -77,7 +84,7 @@ export async function createAccountAction(_prevState: CreateAccountState, formDa
     actionType: "account_created",
     targetType: "account",
     targetId: account.id,
-    details: { name: accountName, adminEmail, maxCompetitors },
+    details: { name: accountName, adminEmail, maxCompetitors, accessExpiresAt },
   });
 
   revalidatePath("/superadmin");

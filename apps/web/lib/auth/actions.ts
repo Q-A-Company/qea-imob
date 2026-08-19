@@ -57,10 +57,17 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
   // preso num loop de redirect sem entender por quê. Checar aqui dá a
   // mensagem certa na hora.
   if (profile.account_id) {
-    const { data: account } = await supabase.from("accounts").select("active").eq("id", profile.account_id).single();
+    const { data: account } = await supabase.from("accounts").select("active, access_expires_at").eq("id", profile.account_id).single();
     if (!account?.active) {
       await supabase.auth.signOut();
       return { error: "A conta da sua empresa está desativada. Entre em contato com o suporte." };
+    }
+    // Mesma checagem, mensagem distinta — accounts.access_expires_at
+    // (migration 0029) é independente de "active" (um SuperAdmin pode
+    // desativar por outro motivo sem mexer na data, e vice-versa).
+    if (account.access_expires_at && new Date(account.access_expires_at) <= new Date()) {
+      await supabase.auth.signOut();
+      return { error: "O acesso da sua empresa expirou. Entre em contato com o suporte." };
     }
   }
 

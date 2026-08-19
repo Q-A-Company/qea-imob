@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { getAccountsData, type AccountListFilters } from "./get-accounts-data";
 import { CreateAccountForm } from "./create-account-form";
+import { isExpired, daysUntilExpiration } from "@/lib/accounts/expiration";
 
 function parseFilters(searchParams: Record<string, string | string[] | undefined>): AccountListFilters {
   const statusRaw = typeof searchParams.status === "string" ? searchParams.status : "todos";
@@ -83,11 +84,31 @@ export default async function SuperAdminPage({
                 className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{account.name}</p>
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {account.name}
+                    {(() => {
+                      // Só quando ainda falta tempo — conta expirada já
+                      // mostra "Expirado" no status logo abaixo (não
+                      // duplica como "faltam -3 dias" aqui).
+                      const daysLeft = daysUntilExpiration(account.accessExpiresAt);
+                      if (daysLeft === null || daysLeft <= 0) return null;
+                      return (
+                        <span className="ml-2 text-xs font-normal text-erro-texto">
+                          (expira em {daysLeft} {daysLeft === 1 ? "dia" : "dias"})
+                        </span>
+                      );
+                    })()}
+                  </p>
                   <p className="mt-0.5 text-xs text-muted">
-                    <span className={account.active ? "text-sucesso-texto" : "text-erro-texto"}>
-                      {account.active ? "Ativo" : "Inativo"}
-                    </span>
+                    {(() => {
+                      // "Expirado" distingue do "Inativo" manual — mesmo
+                      // active=true no banco (accountStatusToggle nunca foi
+                      // mexido), a conta está bloqueada de verdade por causa
+                      // de access_expires_at (lib/accounts/expiration.ts).
+                      const expired = account.active && isExpired(account.accessExpiresAt);
+                      const label = !account.active ? "Inativo" : expired ? "Expirado" : "Ativo";
+                      return <span className={label === "Ativo" ? "text-sucesso-texto" : "text-erro-texto"}>{label}</span>;
+                    })()}
                     {" · "}
                     {account.competitorsCount} {account.competitorsCount === 1 ? "concorrente" : "concorrentes"}
                     {" · "}
