@@ -15,6 +15,35 @@ import { logAuditEvent } from "@/lib/audit/log";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 
+// Compartilhado entre registerCompetitorAction (cadastro novo) e
+// updateCompetitorStatusAction (reativar um arquivado) — os dois únicos
+// jeitos de um concorrente virar "contável" de novo. accounts.max_competitors
+// null = sem limite (accounts.max_competitors, migration 0028). Arquivado
+// não conta pro limite de propósito — é o jeito de "abrir espaço" sem
+// perder o histórico do concorrente removido.
+async function assertUnderCompetitorLimit(
+  supabase: SupabaseClient<Database>,
+  accountId: string
+): Promise<{ error?: string }> {
+  const { data: account } = await supabase.from("accounts").select("max_competitors").eq("id", accountId).maybeSingle();
+  const maxCompetitors = account?.max_competitors ?? null;
+  if (maxCompetitors === null) return {};
+
+  const { count, error } = await supabase
+    .from("competitors")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .neq("status", "arquivado");
+  if (error) return { error: `Falha ao checar limite de concorrentes: ${error.message}` };
+
+  if ((count ?? 0) >= maxCompetitors) {
+    return {
+      error: `Limite de ${maxCompetitors} concorrentes atingido para esta conta — arquive ou exclua algum antes, ou peça a um SuperAdmin pra aumentar o limite em Configurações.`,
+    };
+  }
+  return {};
+}
+
 export interface CheckCompetitorNowState {
   result?: {
     success: boolean;
@@ -158,6 +187,11 @@ export async function registerCompetitorAction(
   if (!listingUrl || !listingUrl.startsWith("http")) return { error: "URL da listagem inválida" };
 
   const supabase = await createClient();
+
+  // Checa o teto ANTES de aprender o site via IA (caro/lento) — falha
+  // rápido e barato quando a conta já está no limite.
+  const limitCheck = await assertUnderCompetitorLimit(supabase, profile.account_id);
+  if (limitCheck.error) return { error: limitCheck.error };
 
   // Pré-checagem amigável — independe do status (ativo/pausado/erro/
   // arquivado), mesma normalização de listing_url_normalized no banco (ver
@@ -656,9 +690,18 @@ export async function updateCompetitorStatusAction(
   const profile = await requireRole(["admin", "gerente"]);
   const supabase = await createClient();
 
-  const { data: competitor } = await supabase.from("competitors").select("id, account_id, name").eq("id", competitorId).single();
+  const { data: competitor } = await supabase.from("competitors").select("id, account_id, name, status").eq("id", competitorId).single();
   if (!competitor || competitor.account_id !== profile.account_id) {
     return { error: "Concorrente não encontrado ou não pertence à sua conta" };
+  }
+
+  // Reativar um arquivado volta a contar pro limite (ver
+  // assertUnderCompetitorLimit) — sem checar aqui, arquivar+desarquivar
+  // seria um jeito de furar o teto. Pausar/arquivar nunca precisa dessa
+  // checagem (só reduzem ou mantêm a contagem).
+  if (newStatus === "ativo" && competitor.status === "arquivado") {
+    const limitCheck = await assertUnderCompetitorLimit(supabase, profile.account_id);
+    if (limitCheck.error) return { error: limitCheck.error };
   }
 
   const { error } = await supabase.from("competitors").update({ status: newStatus }).eq("id", competitorId);

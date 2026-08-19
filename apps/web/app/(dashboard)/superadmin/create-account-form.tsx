@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createAccountAction } from "./actions";
 import type { CreateAccountState } from "@/lib/accounts/types";
+import { MaxCompetitorsChoice } from "../../max-competitors-choice";
 
 const initialState: CreateAccountState = {};
 
@@ -15,6 +16,10 @@ const inputClass =
 // deste retorno).
 export function CreateAccountForm() {
   const [state, formAction, pending] = useActionState(createAccountAction, initialState);
+  // Sem limite por padrão — igual ao comportamento de toda conta existente
+  // hoje (max_competitors null); o SuperAdmin escolhe um teto explícito se
+  // quiser, aqui ou depois em Configurações.
+  const [maxCompetitors, setMaxCompetitors] = useState<number | null>(null);
 
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-lg border border-surface-border bg-surface p-4">
@@ -44,6 +49,11 @@ export function CreateAccountForm() {
             className={inputClass}
             placeholder="maria@imobiliariaexemplo.com.br"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted">Máximo de concorrentes</span>
+          <MaxCompetitorsChoice value={maxCompetitors} onChange={setMaxCompetitors} />
+          <input type="hidden" name="maxCompetitors" value={maxCompetitors === null ? "" : String(maxCompetitors)} />
         </div>
         <button
           type="submit"

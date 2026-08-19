@@ -23,16 +23,23 @@ export async function createAccountAction(_prevState: CreateAccountState, formDa
   const accountName = String(formData.get("accountName") ?? "").trim();
   const adminFullName = String(formData.get("adminFullName") ?? "").trim();
   const adminEmail = String(formData.get("adminEmail") ?? "").trim();
+  // "" (input hidden vazio, ver create-account-form.tsx) = sem limite —
+  // mesmo tratamento do MaxCompetitorsEditor (superadmin/accounts/[id]/).
+  const maxCompetitorsRaw = String(formData.get("maxCompetitors") ?? "").trim();
+  const maxCompetitors = maxCompetitorsRaw === "" ? null : Number(maxCompetitorsRaw);
 
   if (!accountName) return { error: "Nome da imobiliária é obrigatório" };
   if (!adminFullName) return { error: "Nome do administrador é obrigatório" };
   if (!adminEmail || !adminEmail.includes("@")) return { error: "E-mail inválido" };
+  if (maxCompetitors !== null && (!Number.isInteger(maxCompetitors) || maxCompetitors <= 0)) {
+    return { error: "Máximo de concorrentes precisa ser um número inteiro positivo, ou vazio para sem limite" };
+  }
 
   const supabase = createServiceClient();
 
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .insert({ name: accountName, active: true })
+    .insert({ name: accountName, active: true, max_competitors: maxCompetitors })
     .select("id")
     .single();
   if (accountError || !account) return { error: `Falha ao criar conta: ${accountError?.message ?? "erro desconhecido"}` };
@@ -70,7 +77,7 @@ export async function createAccountAction(_prevState: CreateAccountState, formDa
     actionType: "account_created",
     targetType: "account",
     targetId: account.id,
-    details: { name: accountName, adminEmail },
+    details: { name: accountName, adminEmail, maxCompetitors },
   });
 
   revalidatePath("/superadmin");

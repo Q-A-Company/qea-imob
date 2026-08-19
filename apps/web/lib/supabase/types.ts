@@ -46,6 +46,11 @@ export interface Database {
           name: string;
           active: boolean;
           internal_notes: string | null;
+          // Máximo de concorrentes que a conta pode ter cadastrados (não
+          // arquivados) ao mesmo tempo — null = sem limite. Enforced em
+          // registerCompetitorAction e na reativação de um arquivado
+          // (lib/competitors/actions.ts), não só decorativo aqui.
+          max_competitors: number | null;
           created_at: string;
         };
         Insert: {
@@ -53,6 +58,7 @@ export interface Database {
           name: string;
           active?: boolean;
           internal_notes?: string | null;
+          max_competitors?: number | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;

@@ -79,6 +79,33 @@ export async function updateAccountNameAction(accountId: string, name: string): 
   return { success: true };
 }
 
+// null = sem limite. Mesma validação de createAccountAction
+// ((dashboard)/superadmin/actions.ts) — os dois caminhos que gravam esta
+// coluna, mantidos consistentes de propósito.
+export async function updateMaxCompetitorsAction(accountId: string, maxCompetitors: number | null): Promise<ActionState> {
+  const viewer = await requireRole("superadmin");
+  if (maxCompetitors !== null && (!Number.isInteger(maxCompetitors) || maxCompetitors <= 0)) {
+    return { error: "Máximo de concorrentes precisa ser um número inteiro positivo, ou sem limite" };
+  }
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("accounts").select("max_competitors").eq("id", accountId).maybeSingle();
+
+  const { error } = await supabase.from("accounts").update({ max_competitors: maxCompetitors }).eq("id", accountId);
+  if (error) return { error: `Falha ao atualizar limite de concorrentes: ${error.message}` };
+
+  await logAuditEvent({
+    actorUserId: viewer.id,
+    accountId,
+    actionType: "account_max_competitors_changed",
+    targetType: "account",
+    targetId: accountId,
+    details: { oldValue: current?.max_competitors ?? null, newValue: maxCompetitors },
+  });
+  revalidatePath(`/superadmin/accounts/${accountId}/settings`);
+  return { success: true };
+}
+
 export async function updateAccountNotesAction(accountId: string, notes: string): Promise<ActionState> {
   const viewer = await requireRole("superadmin");
   const supabase = await createClient();

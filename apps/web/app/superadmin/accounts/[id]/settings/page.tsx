@@ -6,6 +6,7 @@ import { AccountStatusToggle } from "../account-status-toggle";
 import { DeleteAccountButton } from "../delete-account-button";
 import { AccountNameEditor } from "../account-name-editor";
 import { AccountNotesEditor } from "../account-notes-editor";
+import { MaxCompetitorsEditor } from "../max-competitors-editor";
 import { PendingSiteConfigReview } from "../pending-site-config-review";
 
 function formatDateTime(value: string): string {
@@ -50,6 +51,8 @@ export default async function AccountSettingsPage({ params }: { params: Promise<
       <PendingSiteConfigReview accountId={data.id} configs={pendingConfigs} />
 
       <AccountNameEditor accountId={data.id} initialName={data.name} />
+
+      <MaxCompetitorsEditor accountId={data.id} initialValue={data.maxCompetitors} />
 
       <AccountNotesEditor accountId={data.id} initialNotes={data.internalNotes} />
 
