@@ -6,7 +6,8 @@ import { isExpired, daysUntilExpiration } from "@/lib/accounts/expiration";
 
 function parseFilters(searchParams: Record<string, string | string[] | undefined>): AccountListFilters {
   const statusRaw = typeof searchParams.status === "string" ? searchParams.status : "todos";
-  const status: AccountListFilters["status"] = statusRaw === "ativo" || statusRaw === "inativo" ? statusRaw : "todos";
+  const status: AccountListFilters["status"] =
+    statusRaw === "ativo" || statusRaw === "inativo" || statusRaw === "expirado" ? statusRaw : "todos";
   const search = typeof searchParams.search === "string" && searchParams.search.trim() ? searchParams.search.trim() : null;
   return { search, status };
 }
@@ -61,6 +62,7 @@ export default async function SuperAdminPage({
             <option value="todos">Todos</option>
             <option value="ativo">Ativo</option>
             <option value="inativo">Inativo</option>
+            <option value="expirado">Expirado</option>
           </select>
         </div>
         <button type="submit" className="rounded-md bg-signal px-4 py-2 text-sm font-semibold text-signal-on hover:opacity-90">

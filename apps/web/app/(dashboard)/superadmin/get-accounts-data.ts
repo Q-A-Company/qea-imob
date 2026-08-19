@@ -13,7 +13,7 @@ export interface AccountListItem {
 
 export interface AccountListFilters {
   search: string | null;
-  status: "ativo" | "inativo" | "todos";
+  status: "ativo" | "inativo" | "expirado" | "todos";
 }
 
 // Busca sequencial simples e agrega em JS (mesmo motivo documentado em
@@ -24,7 +24,21 @@ export async function getAccountsData(filters: AccountListFilters): Promise<Acco
   const supabase = await createClient();
 
   let accountsQuery = supabase.from("accounts").select("id, name, active, access_expires_at, created_at").order("name");
-  if (filters.status !== "todos") accountsQuery = accountsQuery.eq("active", filters.status === "ativo");
+
+  // Mesma precedência do rótulo mostrado na lista (page.tsx): "Inativo"
+  // manual (active=false) vence "Expirado" — uma conta desativada por
+  // outro motivo não deveria aparecer no filtro "Expirado" só porque a
+  // data também já passou. "Ativo" no filtro passa a exigir NÃO estar
+  // expirada (antes só olhava active=true cru, o que misturava contas de
+  // verdade ativas com contas bloqueadas por expiração).
+  const nowIso = new Date().toISOString();
+  if (filters.status === "inativo") {
+    accountsQuery = accountsQuery.eq("active", false);
+  } else if (filters.status === "expirado") {
+    accountsQuery = accountsQuery.eq("active", true).not("access_expires_at", "is", null).lte("access_expires_at", nowIso);
+  } else if (filters.status === "ativo") {
+    accountsQuery = accountsQuery.eq("active", true).or(`access_expires_at.is.null,access_expires_at.gt.${nowIso}`);
+  }
   if (filters.search) accountsQuery = accountsQuery.ilike("name", `%${filters.search}%`);
 
   const { data: accounts, error: accountsError } = await accountsQuery;
