@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense, use } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -26,22 +27,53 @@ interface NavItem {
   href: string;
 }
 
+export interface AccountNavBadges {
+  hasPendingReview: boolean;
+  hasNewErrors: boolean;
+}
+
 // "configuracoes" acende quando há revisão de site_config pendente
 // (getPendingSiteConfigCount); "erros" acende quando há erro mais novo que a
 // última visita do SuperAdmin a esta aba, nesta conta
 // (getHasNewErrorsForAccount) — some sozinho ao visitar, sem precisar
 // "limpar" nada (pedido explícito do usuário).
-function hasBadge(item: NavItem, hasPendingReview: boolean, hasNewErrors: boolean): boolean {
-  if (item.key === "configuracoes") return hasPendingReview;
-  if (item.key === "erros") return hasNewErrors;
+function computeShowBadge(item: NavItem, badges: AccountNavBadges): boolean {
+  if (item.key === "configuracoes") return badges.hasPendingReview;
+  if (item.key === "erros") return badges.hasNewErrors;
   return false;
 }
 
-function NavIcon({ icon: Icon, showBadge }: { icon: LucideIcon; showBadge: boolean }) {
+// use() suspende só ESTE componente, não o resto do NavIcon/item de nav —
+// os badges chegam um instante depois do resto da sidebar (a Promise vem
+// de layout.tsx, sem await direto lá), em vez de travar a navegação
+// inteira até as duas consultas de badge terminarem. Mesmo raciocínio do
+// sino de notificações em (dashboard)/notification-bell-section.tsx —
+// achado real: antes desta mudança, entrar/navegar dentro de uma conta
+// como SuperAdmin nunca mostrava o loading.tsx (o layout segurava tudo),
+// diferente de admin/gerente/usuario, que já tinha esse conserto.
+function NavBadgeDot({ item, badgesPromise }: { item: NavItem; badgesPromise: Promise<AccountNavBadges> }) {
+  const badges = use(badgesPromise);
+  if (!computeShowBadge(item, badges)) return null;
+  return <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-erro" aria-hidden="true" />;
+}
+
+// Mesma ideia do dot, só que pro texto acessível "(novo)" — separado
+// porque um <span> dentro de texto (não posicionado/absolute) precisa
+// suspender independente do dot, senão os dois brigam pelo mesmo
+// Suspense mais próximo sem necessidade.
+function NavBadgeSrText({ item, badgesPromise }: { item: NavItem; badgesPromise: Promise<AccountNavBadges> }) {
+  const badges = use(badgesPromise);
+  if (!computeShowBadge(item, badges)) return null;
+  return <span className="sr-only"> (novo)</span>;
+}
+
+function NavIcon({ icon: Icon, item, badgesPromise }: { icon: LucideIcon; item: NavItem; badgesPromise: Promise<AccountNavBadges> }) {
   return (
     <span className="relative inline-flex shrink-0">
       <Icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
-      {showBadge && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-erro" aria-hidden="true" />}
+      <Suspense fallback={null}>
+        <NavBadgeDot item={item} badgesPromise={badgesPromise} />
+      </Suspense>
     </span>
   );
 }
@@ -85,8 +117,7 @@ export function AccountSidebar({
   fullName,
   avatarUrl,
   role,
-  hasPendingReview,
-  hasNewErrors,
+  badgesPromise,
 }: {
   accountId: string;
   pinned: boolean;
@@ -94,8 +125,7 @@ export function AccountSidebar({
   fullName: string | null;
   avatarUrl: string | null;
   role: UserRole;
-  hasPendingReview: boolean;
-  hasNewErrors: boolean;
+  badgesPromise: Promise<AccountNavBadges>;
 }) {
   const pathname = usePathname();
   const items = buildAccountNavItems(accountId);
@@ -143,7 +173,6 @@ export function AccountSidebar({
         <ul className="flex flex-col gap-1 overflow-y-auto overflow-x-hidden px-2">
           {items.map((item) => {
             const active = pathname === item.href;
-            const showBadge = hasBadge(item, hasPendingReview, hasNewErrors);
             return (
               <li key={item.key}>
                 <Link
@@ -153,10 +182,12 @@ export function AccountSidebar({
                     active ? "bg-foreground/5 text-foreground" : "text-muted hover:bg-background hover:text-foreground"
                   }`}
                 >
-                  <NavIcon icon={item.icon} showBadge={showBadge} />
+                  <NavIcon icon={item.icon} item={item} badgesPromise={badgesPromise} />
                   <span className={labelOpacityClass}>
                     {item.label}
-                    {showBadge && <span className="sr-only"> (novo)</span>}
+                    <Suspense fallback={null}>
+                      <NavBadgeSrText item={item} badgesPromise={badgesPromise} />
+                    </Suspense>
                   </span>
                 </Link>
               </li>
@@ -179,19 +210,26 @@ export function AccountSidebar({
       >
         {items.map((item) => {
           const active = pathname === item.href;
-          const showBadge = hasBadge(item, hasPendingReview, hasNewErrors);
           return (
+            // Sem aria-label estático de propósito (diferente de antes) —
+            // aria-label sobrescreveria o nome acessível inteiro e ignoraria
+            // o <NavBadgeSrText> abaixo (que só resolve depois de
+            // streamado); deixando sem, o nome acessível vem do texto
+            // visível (item.label) + o sr-only quando existir, os dois
+            // reais children do link.
             <Link
               key={item.key}
               href={item.href}
-              aria-label={showBadge ? `${item.label} (novo)` : item.label}
               onClick={blurOnMouseClick}
               className={`group/navlink flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${
                 active ? "text-signal-text" : "text-muted"
               }`}
             >
-              <NavIcon icon={item.icon} showBadge={showBadge} />
+              <NavIcon icon={item.icon} item={item} badgesPromise={badgesPromise} />
               {item.label}
+              <Suspense fallback={null}>
+                <NavBadgeSrText item={item} badgesPromise={badgesPromise} />
+              </Suspense>
             </Link>
           );
         })}

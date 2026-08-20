@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AccountSidebar } from "./account-sidebar";
+import { AccountSidebar, type AccountNavBadges } from "./account-sidebar";
 import { AutoRefresh } from "@/app/(dashboard)/auto-refresh";
 import type { UserRole } from "@/lib/supabase/types";
 
@@ -16,8 +16,7 @@ export function AccountShellChrome({
   fullName,
   avatarUrl,
   role,
-  hasPendingReview,
-  hasNewErrors,
+  badgesPromise,
   children,
 }: {
   accountId: string;
@@ -25,8 +24,7 @@ export function AccountShellChrome({
   fullName: string | null;
   avatarUrl: string | null;
   role: UserRole;
-  hasPendingReview: boolean;
-  hasNewErrors: boolean;
+  badgesPromise: Promise<AccountNavBadges>;
   children: React.ReactNode;
 }) {
   const [pinned, setPinned] = useState(initialPinned);
@@ -49,8 +47,7 @@ export function AccountShellChrome({
         fullName={fullName}
         avatarUrl={avatarUrl}
         role={role}
-        hasPendingReview={hasPendingReview}
-        hasNewErrors={hasNewErrors}
+        badgesPromise={badgesPromise}
       />
       <div
         className={`pb-16 transition-[padding-left] duration-200 ease-out md:pb-0 print:pb-0 print:pl-0 ${

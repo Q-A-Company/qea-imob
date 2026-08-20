@@ -7,6 +7,7 @@ import { getAccountBanner } from "./get-account-banner";
 import { getPendingSiteConfigCount } from "./get-pending-site-configs";
 import { getHasNewErrorsForAccount } from "./get-account-error-runs";
 import { AccountShellChrome } from "./account-shell-chrome";
+import type { AccountNavBadges } from "./account-sidebar";
 
 // Shell próprio, fora de app/(dashboard)/ de propósito — layouts do Next.js
 // sempre aninham pela posição real no sistema de arquivos, sem exceção; se
@@ -50,10 +51,21 @@ export default async function AccountShellLayout({
   // Sinalizações da nav (account-sidebar.tsx): "Configurações" acende com
   // revisão de site_config pendente, "Relatório de erros" acende com erro
   // mais novo que a última visita DESTE SuperAdmin a esta conta.
-  const [pendingReviewCount, hasNewErrors] = await Promise.all([
+  //
+  // SEM await aqui de propósito — a Promise desce até account-sidebar.tsx,
+  // que resolve via use() dentro do próprio Suspense de cada badge (ver
+  // NavBadgeDot/NavBadgeSrText lá). Antes, esses dois awaits diretos aqui
+  // travavam a navegação inteira: como loading.tsx nunca envolve o
+  // layout.tsx do mesmo segmento (só page.tsx e layouts aninhados abaixo —
+  // documentado em node_modules/next/dist/docs/.../loading.md), qualquer
+  // await direto no corpo deste layout segurava {children} junto, mesmo
+  // motivo já corrigido pro sino de notificações em (dashboard)/layout.tsx.
+  // Isso explicava por que SuperAdmin nunca via o spinner entrando/
+  // navegando numa conta, diferente de admin/gerente/usuario.
+  const badgesPromise: Promise<AccountNavBadges> = Promise.all([
     getPendingSiteConfigCount(id, competitorIds),
     getHasNewErrorsForAccount(profile.id, id, competitorIds),
-  ]);
+  ]).then(([pendingReviewCount, hasNewErrors]) => ({ hasPendingReview: pendingReviewCount > 0, hasNewErrors }));
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -63,8 +75,7 @@ export default async function AccountShellLayout({
         fullName={profile.full_name}
         avatarUrl={profile.avatar_url}
         role={profile.role}
-        hasPendingReview={pendingReviewCount > 0}
-        hasNewErrors={hasNewErrors}
+        badgesPromise={badgesPromise}
       >
         <div className="print:hidden flex flex-wrap items-center gap-3 border-b border-surface-border bg-signal/10 px-6 py-2 text-sm">
           <span className="text-foreground">
