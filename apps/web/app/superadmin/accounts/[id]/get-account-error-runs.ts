@@ -78,26 +78,42 @@ export async function getAccountErrorRuns(accountId: string, page: number): Prom
 // conta, não um simples count>0 global). Sem linha em
 // superadmin_error_report_views ainda (nunca visitou) = qualquer erro já
 // acende o aviso.
-export async function getHasNewErrorsForAccount(userId: string, accountId: string): Promise<boolean> {
+// competitorIds opcional (mesmo motivo de getPendingSiteConfigCount,
+// get-pending-site-configs.ts) — layout.tsx busca essa lista uma vez só e
+// repassa pras duas funções de badge, em vez de cada uma buscar
+// "competitors" da conta de novo. Quando não vem pronta, ainda busca em
+// PARALELO com a última visita (viewRow) — as duas são independentes entre
+// si, só a query final de scraper_runs depende das duas.
+export async function getHasNewErrorsForAccount(userId: string, accountId: string, competitorIds?: string[]): Promise<boolean> {
   const supabase = await createClient();
 
-  const { data: competitors, error: competitorsError } = await supabase.from("competitors").select("id").eq("account_id", accountId);
-  if (competitorsError) throw new Error(`Falha ao buscar concorrentes: ${competitorsError.message}`);
-  const competitorIds = (competitors ?? []).map((c) => c.id);
-  if (competitorIds.length === 0) return false;
-
-  const { data: viewRow, error: viewError } = await supabase
-    .from("superadmin_error_report_views")
-    .select("viewed_at")
-    .eq("user_id", userId)
-    .eq("account_id", accountId)
-    .maybeSingle();
-  if (viewError) throw new Error(`Falha ao buscar última visita ao relatório de erros: ${viewError.message}`);
+  const [ids, viewRow] = await Promise.all([
+    competitorIds ??
+      supabase
+        .from("competitors")
+        .select("id")
+        .eq("account_id", accountId)
+        .then(({ data, error }) => {
+          if (error) throw new Error(`Falha ao buscar concorrentes: ${error.message}`);
+          return (data ?? []).map((c) => c.id);
+        }),
+    supabase
+      .from("superadmin_error_report_views")
+      .select("viewed_at")
+      .eq("user_id", userId)
+      .eq("account_id", accountId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) throw new Error(`Falha ao buscar última visita ao relatório de erros: ${error.message}`);
+        return data;
+      }),
+  ]);
+  if (ids.length === 0) return false;
 
   let query = supabase
     .from("scraper_runs")
     .select("id", { count: "exact", head: true })
-    .in("competitor_id", competitorIds)
+    .in("competitor_id", ids)
     .or("success.eq.false,stopped_early_due_to_error.eq.true");
   if (viewRow) {
     query = query.gt("created_at", viewRow.viewed_at);

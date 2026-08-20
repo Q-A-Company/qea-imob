@@ -27,23 +27,25 @@ export interface NotificationBellData {
 export async function getNotificationBellData(accountId: string, role: UserRole): Promise<NotificationBellData> {
   const supabase = await createClient();
 
-  const { data: notifications } = await supabase
-    .from("notifications")
-    .select("id, title, message, read, created_at, competitor_id")
-    .eq("account_id", accountId)
-    .order("created_at", { ascending: false })
-    .limit(10);
+  // As duas são independentes entre si (nenhuma usa o resultado da outra)
+  // — rodavam em sequência antes, sem motivo; Promise.all corta um
+  // round-trip inteiro em toda navegação dentro do painel (esse bloco roda
+  // no layout, não só na página de notificações).
+  const [{ data: notifications }, { count: unreadCount }] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("id, title, message, read, created_at, competitor_id")
+      .eq("account_id", accountId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("account_id", accountId).eq("read", false),
+  ]);
 
-  const { count: unreadCount } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("account_id", accountId)
-    .eq("read", false);
-
-  // Duas queries sequenciais, não embed aninhado do PostgREST — mesmo
-  // motivo já documentado em get-dashboard-data.ts/get-report-data.ts (o
-  // Database type deste projeto não tem metadados de relacionamento
-  // completos). competitor_id vem null pra notificações anteriores à
+  // Terceira query sequencial (depende do resultado das duas acima pros
+  // competitor_id) — não embed aninhado do PostgREST, mesmo motivo já
+  // documentado em get-dashboard-data.ts/get-report-data.ts (o Database
+  // type deste projeto não tem metadados de relacionamento completos).
+  // competitor_id vem null pra notificações anteriores à
   // migration 0022 — CompetitorAvatar já trata isso com um fallback neutro.
   const competitorIds = [...new Set((notifications ?? []).map((n) => n.competitor_id).filter((id): id is string => id !== null))];
   const { data: competitors } = competitorIds.length

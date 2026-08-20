@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
 import { getAccountBanner } from "./get-account-banner";
 import { getPendingSiteConfigCount } from "./get-pending-site-configs";
 import { getHasNewErrorsForAccount } from "./get-account-error-runs";
@@ -24,21 +25,34 @@ export default async function AccountShellLayout({
 }) {
   const profile = await requireRole("superadmin");
   const { id } = await params;
-  const account = await getAccountBanner(id);
+
+  // Este layout roda em TODA navegação dentro de uma conta (Configurações,
+  // Concorrentes, Usuários, Erros...) — antes disso, getAccountBanner e as
+  // duas funções de badge rodavam em sequência (banner primeiro, badges
+  // depois), e as duas de badge buscavam "competitors" da conta cada uma
+  // por conta própria, de forma redundante. Busca os IDs UMA vez aqui e
+  // dispara banner + as duas badges juntos, sem dependência entre si —
+  // achado investigando lentidão real navegando como SuperAdmin.
+  const cookieStore = await cookies();
+  const supabase = await createClient();
+  const [account, competitorRows] = await Promise.all([
+    getAccountBanner(id),
+    supabase.from("competitors").select("id").eq("account_id", id),
+  ]);
   if (!account) notFound();
+  const competitorIds = (competitorRows.data ?? []).map((c) => c.id);
 
   // Mesmo cookie "sidebar-pinned" lido em (dashboard)/layout.tsx — uma
   // preferência de UI só, compartilhada entre a navegação por role e esta
   // navegação escopada à conta.
-  const cookieStore = await cookies();
   const sidebarPinned = cookieStore.get("sidebar-pinned")?.value !== "false";
 
   // Sinalizações da nav (account-sidebar.tsx): "Configurações" acende com
   // revisão de site_config pendente, "Relatório de erros" acende com erro
   // mais novo que a última visita DESTE SuperAdmin a esta conta.
   const [pendingReviewCount, hasNewErrors] = await Promise.all([
-    getPendingSiteConfigCount(id),
-    getHasNewErrorsForAccount(profile.id, id),
+    getPendingSiteConfigCount(id, competitorIds),
+    getHasNewErrorsForAccount(profile.id, id, competitorIds),
   ]);
 
   return (

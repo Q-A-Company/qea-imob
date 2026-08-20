@@ -74,12 +74,20 @@ export async function getPendingSiteConfigs(accountId: string): Promise<PendingS
 // (layout.tsx -> AccountShellChrome -> AccountSidebar), que roda em toda
 // página escopada à conta e não precisa dos detalhes completos que
 // getPendingSiteConfigs traz. Mesmo filtro version/sent_to_superadmin_at.
-export async function getPendingSiteConfigCount(accountId: string): Promise<number> {
+//
+// competitorIds opcional — layout.tsx já busca essa lista pra passar
+// também pra getHasNewErrorsForAccount (mesmo shell, mesmo request); sem
+// isso, as duas funções buscavam "competitors" da conta de forma
+// independente e redundante em TODA navegação dentro da conta (achado
+// investigando lentidão real percebida navegando como SuperAdmin).
+export async function getPendingSiteConfigCount(accountId: string, competitorIds?: string[]): Promise<number> {
   const supabase = await createClient();
 
-  const { data: competitors, error: competitorsError } = await supabase.from("competitors").select("id").eq("account_id", accountId);
-  if (competitorsError) throw new Error(`Falha ao buscar concorrentes: ${competitorsError.message}`);
-  const competitorIds = (competitors ?? []).map((c) => c.id);
+  if (!competitorIds) {
+    const { data: competitors, error: competitorsError } = await supabase.from("competitors").select("id").eq("account_id", accountId);
+    if (competitorsError) throw new Error(`Falha ao buscar concorrentes: ${competitorsError.message}`);
+    competitorIds = (competitors ?? []).map((c) => c.id);
+  }
   if (competitorIds.length === 0) return 0;
 
   const { count, error } = await supabase
