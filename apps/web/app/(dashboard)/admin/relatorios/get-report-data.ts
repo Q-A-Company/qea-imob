@@ -161,18 +161,28 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
   // não "busca tudo" a partir de mil linhas (reproduzido contra dados
   // reais: Sentineli & Sobral tem 1408 properties, essa query devolvia só
   // 1000, derrubando linhas do relatório sem nenhum aviso — mesma causa
-  // raiz do bug de duplicate key corrigido em persist-and-compare.ts). Cada
-  // página reconstrói a query do zero (mesmos filtros + .range() novo) —
-  // um query builder do supabase-js só pode ser resolvido (`await`) uma
-  // vez, não dá pra reaproveitar o mesmo objeto entre páginas.
-  function buildPropertiesQuery(offset: number) {
+  // raiz do bug de duplicate key corrigido em persist-and-compare.ts).
+  //
+  // Cursor por "id" (keyset), não .range(offset, ...) — medido contra dados
+  // reais (conta com 5467 properties, RLS ativa via chave anon): OFFSET alto
+  // sob RLS é imprevisível (páginas em offset 3000/4000 chegaram a 2-2.4s
+  // cada, Postgres reavalia a policy pra cada linha varrida até alcançar o
+  // offset, não só pra cada linha devolvida), enquanto cursor por id ficou
+  // consistente (~130-160ms por página, sem crescer com o offset) — total
+  // 5.4s → ~0.8s. Seguro aqui porque a ORDEM de properties nunca aparece pro
+  // usuário: essa lista só vira os Maps/Set abaixo (propertyById/
+  // propertyIds), usados pra enriquecer e filtrar as linhas de
+  // property_changes — quem decide a ordem final exibida é o ORDER BY
+  // detected_at em fetchFilteredRows, não este fetch.
+  function buildPropertiesQuery(cursor: string | null) {
     let q = supabase
       .from("properties")
       .select("id, external_id, reference_code, url, attributes, competitor_id, status")
       .in("competitor_id", targetCompetitorIds);
     if (filters.status !== "ambos") q = q.eq("status", filters.status);
     if (filters.search) q = q.ilike("external_id", `%${filters.search}%`);
-    return q.range(offset, offset + PROPERTIES_FETCH_PAGE_SIZE - 1);
+    if (cursor) q = q.gt("id", cursor);
+    return q.order("id", { ascending: true }).limit(PROPERTIES_FETCH_PAGE_SIZE);
   }
 
   const properties: {
@@ -184,11 +194,13 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     competitor_id: string;
     status: "ativo" | "possivelmente_vendido";
   }[] = [];
-  for (let offset = 0; ; offset += PROPERTIES_FETCH_PAGE_SIZE) {
-    const { data, error: propertiesError } = await buildPropertiesQuery(offset);
+  let propertiesCursor: string | null = null;
+  for (;;) {
+    const { data, error: propertiesError } = await buildPropertiesQuery(propertiesCursor);
     if (propertiesError) throw new Error(`Falha ao buscar imóveis: ${propertiesError.message}`);
     properties.push(...(data ?? []));
     if (!data || data.length < PROPERTIES_FETCH_PAGE_SIZE) break;
+    propertiesCursor = data[data.length - 1].id;
   }
 
   const propertyById = new Map(properties.map((p) => [p.id, p]));
@@ -298,25 +310,27 @@ export async function getReportData(accountId: string, filters: ReportFilters): 
     });
   }
 
-  const filtered = await fetchFilteredRows(filters.from, filters.to);
+  // Indicador percentual do KpiCard só existe quando o período tem os dois
+  // limites definidos — sem eles, "período anterior de tamanho igual" não
+  // tem uma definição sem ambiguidade (decisão confirmada com o usuário:
+  // omitir o indicador em vez de mostrar uma comparação mal definida).
+  //
+  // As duas buscas (período atual + período anterior) não dependem uma da
+  // outra — Promise.all em vez de sequencial, achado no mesmo levantamento
+  // de performance que trocou o fetch de properties pra keyset acima.
+  const comparisonWindow = filters.from && filters.to ? computeComparisonWindow(filters.from, filters.to) : null;
+  const [filtered, previousFiltered] = await Promise.all([
+    fetchFilteredRows(filters.from, filters.to),
+    comparisonWindow ? fetchFilteredRows(comparisonWindow.from, comparisonWindow.to) : Promise.resolve(null),
+  ]);
 
   const totalCount = filtered.length;
   const offset = (filters.page - 1) * PAGE_SIZE;
   const rows = filtered.slice(offset, offset + PAGE_SIZE);
 
-  // Indicador percentual do KpiCard só existe quando o período tem os dois
-  // limites definidos — sem eles, "período anterior de tamanho igual" não
-  // tem uma definição sem ambiguidade (decisão confirmada com o usuário:
-  // omitir o indicador em vez de mostrar uma comparação mal definida).
-  let previousPeriod: ReportIndicators["previousPeriod"] = null;
-  if (filters.from && filters.to) {
-    const comparisonWindow = computeComparisonWindow(filters.from, filters.to);
-    const previousFiltered = await fetchFilteredRows(comparisonWindow.from, comparisonWindow.to);
-    previousPeriod = {
-      totalChanges: previousFiltered.length,
-      uniquePropertiesChanged: new Set(previousFiltered.map((r) => r.propertyId)).size,
-    };
-  }
+  const previousPeriod: ReportIndicators["previousPeriod"] = previousFiltered
+    ? { totalChanges: previousFiltered.length, uniquePropertiesChanged: new Set(previousFiltered.map((r) => r.propertyId)).size }
+    : null;
 
   return {
     rows,

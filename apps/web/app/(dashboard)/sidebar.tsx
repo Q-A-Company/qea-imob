@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AccountMenu } from "./account-menu";
 import { IconButton } from "./icon-button";
+import { NavPendingOverlay } from "./nav-pending-overlay";
 import type { UserRole } from "@/lib/supabase/types";
 
 // Duplicado (não importado de lib/auth/dal.ts) de propósito: aquele arquivo
@@ -191,6 +192,7 @@ export function Sidebar({
                   {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-signal" aria-hidden />}
                   <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
                   <span className={labelOpacityClass}>{item.label}</span>
+                  <NavPendingOverlay pinned={pinned} />
                 </Link>
               </li>
             );
@@ -236,6 +238,7 @@ export function Sidebar({
               }`}
             >
               <item.icon className="h-5 w-5 shrink-0 transition-transform duration-200 ease-out group-hover/navlink:scale-110" />
+              <NavPendingOverlay pinned={pinned} />
             </Link>
           );
         })}

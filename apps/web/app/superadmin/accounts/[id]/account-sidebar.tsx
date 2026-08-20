@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { AccountMenu } from "@/app/(dashboard)/account-menu";
 import { IconButton } from "@/app/(dashboard)/icon-button";
+import { NavPendingOverlay } from "@/app/(dashboard)/nav-pending-overlay";
 import type { UserRole } from "@/lib/supabase/types";
 
 interface NavItem {
@@ -189,6 +190,7 @@ export function AccountSidebar({
                       <NavBadgeSrText item={item} badgesPromise={badgesPromise} />
                     </Suspense>
                   </span>
+                  <NavPendingOverlay pinned={pinned} />
                 </Link>
               </li>
             );
@@ -230,6 +232,7 @@ export function AccountSidebar({
               <Suspense fallback={null}>
                 <NavBadgeSrText item={item} badgesPromise={badgesPromise} />
               </Suspense>
+              <NavPendingOverlay pinned={pinned} />
             </Link>
           );
         })}
