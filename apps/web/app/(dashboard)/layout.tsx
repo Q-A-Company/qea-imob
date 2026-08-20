@@ -1,9 +1,10 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/dal";
 import { requireAcceptedTerms } from "@/lib/legal/terms-gate";
 import { DashboardChrome } from "./dashboard-chrome";
-import { getNotificationBellData } from "./notification-bell";
+import { NotificationBellSection } from "./notification-bell-section";
 
 // Header removido (pedido do usuário) — perfil, notificações e sair
 // migraram pro rodapé da sidebar (ver sidebar.tsx). Conteúdo de cada
@@ -26,8 +27,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const cookieStore = await cookies();
   const sidebarPinned = cookieStore.get("sidebar-pinned")?.value !== "false";
 
-  const notificationData = profile.account_id ? await getNotificationBellData(profile.account_id, profile.role) : null;
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardChrome
@@ -35,7 +34,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
         initialPinned={sidebarPinned}
         fullName={profile.full_name}
         avatarUrl={profile.avatar_url}
-        notificationData={notificationData}
+        notificationBell={
+          // Suspense em vez de await direto aqui — ver comentário em
+          // notification-bell-section.tsx. Sem isso, este layout (o ponto
+          // de entrada de QUALQUER navegação entre páginas do painel)
+          // segurava a página inteira até o sino terminar de buscar.
+          // fallback null: ícone só aparece quando pronto, sem "pulo" de
+          // layout (é position:fixed, não ocupa espaço reservado).
+          profile.account_id ? (
+            <Suspense fallback={null}>
+              <NotificationBellSection accountId={profile.account_id} role={profile.role} />
+            </Suspense>
+          ) : null
+        }
       >
         <main className="p-6 print:p-0">{children}</main>
       </DashboardChrome>
