@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth/dal";
-import { requireAcceptedTerms } from "@/lib/legal/terms-gate";
 import { DashboardChrome } from "./dashboard-chrome";
 import { NotificationBellSection } from "./notification-bell-section";
 
@@ -13,11 +12,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profile = await getProfile();
   if (!profile) redirect("/login");
 
-  // Este layout não passa por requireRole() (não restringe papel, só
-  // exige "algum" usuário logado) — por isso repete aqui a mesma checagem
-  // de aceite de termos que requireRole() já faz, senão as páginas dentro
-  // de (dashboard)/ ficariam sem esse gate.
-  await requireAcceptedTerms(profile.id);
+  // SEM requireAcceptedTerms(profile.id) aqui de propósito — chamada
+  // direta e sem cache() nesta função (ver lib/legal/terms-gate.ts), e
+  // todo page.tsx dentro de (dashboard)/ já chama requireRole(), que faz
+  // essa mesma checagem. Como loading.tsx nunca envolve o layout.tsx do
+  // MESMO segmento (só page.tsx e layouts aninhados abaixo — mesmo motivo
+  // já documentado em notification-bell-section.tsx e no layout de
+  // superadmin/accounts/[id]), esse await aqui rodava em toda navegação
+  // dentro de (dashboard) sem nunca mostrar o spinner — explicava por que
+  // admin/gerente/usuario nunca viam loading.tsx trocando de aba, e
+  // dobrava a consulta (layout + requireRole da página) em toda troca.
 
   // Mesmo padrão do cookie "theme" em app/layout.tsx: decidido no servidor,
   // sem script anti-flash — isso só define o valor INICIAL (evita flash no
