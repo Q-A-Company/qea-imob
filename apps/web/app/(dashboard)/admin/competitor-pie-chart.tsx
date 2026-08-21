@@ -88,7 +88,14 @@ export function CompetitorPieChart({
                   style={{ backgroundColor: colorForCompetitor(e.competitorId) }}
                   aria-hidden
                 />
-                <span className="font-mono text-xs font-semibold text-foreground">{e.abbreviation}</span>
+                {/* Abreviação também na cor do concorrente (não só o dot) —
+                    associação mais direta entre a fatia da pizza e a linha
+                    da legenda, pedido do usuário depois da unificação de
+                    identidade (paleta categórica em si não mudou, ver
+                    lib/categorical-colors.ts). */}
+                <span className="font-mono text-xs font-semibold" style={{ color: colorForCompetitor(e.competitorId) }}>
+                  {e.abbreviation}
+                </span>
                 <span className="truncate text-xs text-muted">{e.name}</span>
                 <span className="ml-auto shrink-0 font-mono text-xs text-muted">{e.count}</span>
               </li>

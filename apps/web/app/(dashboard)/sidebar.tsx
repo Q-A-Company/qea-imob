@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -125,23 +126,38 @@ export function Sidebar({
           pinned ? "w-56" : "w-16 hover:w-56 focus-within:w-56"
         }`}
       >
-        {/* Marca: "Q&A" fica sempre visível (é o que aparece com a sidebar
-            recolhida, só ícones) — "Imob" e a tagline usam o mesmo
-            labelOpacityClass dos itens de navegação abaixo, revelados junto
-            no hover/foco/pin. font-display (BR Sonoma) + text-foreground —
-            item de destaque da área, não mais texto pequeno ao lado de um
-            ícone (o antigo Activity saiu). */}
+        {/* Marca: logo real da Q&A Company fica sempre visível (é o que
+            aparece com a sidebar recolhida, só ícones) — a tagline usa o
+            mesmo labelOpacityClass dos itens de navegação abaixo, revelada
+            junto no hover/foco/pin. */}
         <div className="mb-4 flex items-start justify-between gap-2 px-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <p className="whitespace-nowrap font-display text-lg leading-tight font-bold text-signal-text">
-              Q&amp;A<span className={labelOpacityClass}>&nbsp;Imob</span>
-            </p>
-            {/* Sem whitespace-nowrap aqui de propósito (diferente do nome
-                acima) — a frase é mais longa que os 200px úteis da sidebar
-                expandida (224px - padding); precisa poder quebrar em 2
-                linhas em vez de estourar e ficar cortada pelo overflow-hidden
-                do nav. */}
-            <p className={`text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            {/* Logo real da Q&A Company (unificação de identidade — mesmo
+                arquivo usado no site institucional), não mais o texto "Q&A
+                Imob" estilizado. Duas versões trocadas via classe `dark`
+                (mesmo mecanismo de tema do resto do app, decidido no
+                servidor — sem JS, sem flash) — logo-white.png sobre fundo
+                escuro, logo-black.png sobre fundo claro. shrink-0: nunca
+                perde espaço pro texto ao lado quando a sidebar recolhe. */}
+            <Image
+              src="/brand/logo-black.png"
+              alt="Q&A Company"
+              width={28}
+              height={28}
+              className="block h-7 w-7 shrink-0 object-contain dark:hidden"
+            />
+            <Image
+              src="/brand/logo-white.png"
+              alt="Q&A Company"
+              width={28}
+              height={28}
+              className="hidden h-7 w-7 shrink-0 object-contain dark:block"
+            />
+            {/* Sem whitespace-nowrap aqui de propósito — a frase é mais longa
+                que os 200px úteis da sidebar expandida (224px - padding);
+                precisa poder quebrar em 2 linhas em vez de estourar e ficar
+                cortada pelo overflow-hidden do nav. */}
+            <p className={`min-w-0 text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
               Uma solução da Q&A Company.
             </p>
           </div>

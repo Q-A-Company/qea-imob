@@ -5,89 +5,88 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Segunda geração da paleta (redesign completo — ver conversa de
-     definição): saiu o par "quase-preto + acento roxo" (reconhecível como
-     template de IA), entrou uma família de material de agrimensor/cadastro
-     imobiliário — papel vegetal + tinta técnica nos dois extremos de
-     neutro (mesmo viés de matiz frio-acinzentado nos dois, não dois
-     conceitos desencontrados), com acentos quentes (latão, ferrugem,
-     musgo) por cima. --color-latao é EXCLUSIVO de "mudança detectada"/ação
-     principal — nunca decorativo em outro lugar; direção-agnóstico de
-     propósito (alta ou queda de preço usam a mesma cor — "mudou" é uma
-     informação, "é bom pra você" é outra, e cabe ao usuário julgar).
-     Contraste calculado com script (WCAG relative luminance), não
-     estimativa visual — valores comentados abaixo em cada linha. */
-  --color-latao: #c4923a; /* mudança detectada — dourado de instrumento/etiqueta de preço, NUNCA decorativo fora desse papel */
-  --color-ferrugem: #9c4a3c; /* avisos e erros — ~5,40:1 sobre --color-papel, passa direto */
-  --color-musgo: #4f6b1c; /* sucesso — ~5,41:1 sobre --color-papel, passa direto */
+  /* Terceira geração da paleta — unificação de identidade com o site
+     institucional (qeacompany.com.br, "Q&A Company"), a pedido do usuário:
+     o Q&A Imob é um case de portfólio de lá ("Soluções Digitais"), sem
+     nenhuma questão de marca em manter as duas visualmente distintas.
+     Valores extraídos DIRETO do CSS de produção do site (fetch real, não
+     estimativa): o institucional é estritamente preto-e-branco, sem
+     nenhuma cor de acento — os CTAs de lá ("Fale com a gente") são só
+     bg-foreground/text-background, um pill de contraste máximo, não uma
+     cor de marca. Isso substitui a geração anterior (papel/tinteiro +
+     latão/ferrugem/musgo — ver histórico do arquivo) inteira: sai o
+     dourado como acento decorativo (--color-latao), entra monocromático.
+     "Mudança de preço detectada" (antes só cor) passa a se comunicar por
+     peso/ícone nos componentes — trabalho por arquivo, ainda em curso.
+     erro/sucesso (ferrugem/musgo) continuam coloridos DE PROPÓSITO: são
+     estado funcional da UI, não acento de marca — o próprio institucional
+     usa vermelho no --destructive dele (default do shadcn/ui) mesmo sendo
+     monocromático na marca. Modo claro do institucional não existe (o
+     site é dark-only, sem toggle) — os valores abaixo pro claro vêm da
+     METADE clara dos tokens shadcn/ui que o próprio CSS deles carrega
+     (não usada na página deles, mas parte do mesmo design system, não
+     invenção nossa). Contraste calculado com script (WCAG relative
+     luminance) — valores comentados em cada linha. */
+  --color-ferrugem: #9c4a3c; /* erro/aviso — ~6,07:1 sobre --color-papel */
+  --color-musgo: #4f6b1c; /* sucesso — ~6,08:1 sobre --color-papel */
 
-  /* Segunda rodada de ajuste (só modo escuro — modo claro intocado): fundo
-     geral, superfície elevada e nav agora são 3 tons quase-pretos bem
-     próximos entre si (--color-tinteiro < --color-breu < --color-carvao em
-     luminância, mas só ~1,01–1,04:1 de diferença entre eles — separação
-     bem mais sutil que a rodada anterior, por pedido explícito). Contraste
-     dos acentos (latão/ferrugem/musgo/anil) como TEXTO recalculado via
-     script contra os 3 novos tons, não presumido — todos os valores de
-     --*-text existentes (ver .dark abaixo) continuam passando AA, e
-     inclusive MELHORARAM (fundo mais escuro ajudou aqui porque os acentos
-     são todos claros/médios — não seria automático se fossem escuros). */
-  --color-tinteiro: #030303; /* fundo geral modo escuro */
-  --color-breu: #090909; /* sidebar/nav modo escuro — tom próprio, não reaproveita mais --color-carvao */
-  --color-carvao: #0a0a0a; /* fundo de superfícies elevadas modo escuro — cards, gráficos */
-  --color-papel: #f0f2f0; /* fundo geral modo claro — papel vegetal, frio, não creme */
-  --color-tinta: #161c1e; /* texto primário modo claro — ~15,3:1 sobre --color-papel */
-  --color-neve: #eaeeec; /* texto primário modo escuro — ~15,0:1 sobre --color-tinteiro */
-  --color-grafite: #7c8783; /* texto secundário/ícones/bordas nos dois modos */
+  --color-papel: #ffffff; /* fundo geral modo claro — branco puro, igual ao token "background" claro do institucional */
+  --color-carvao: #f5f5f5; /* superfícies elevadas modo claro (cards) — token "secondary/muted/accent" do institucional */
+  --color-tinta: #0a0a0a; /* texto primário modo claro — ~19,80:1 sobre --color-papel, token "foreground" claro do institucional */
+  --color-tinteiro: #000000; /* fundo geral modo escuro — preto puro, extraído do institucional */
+  --color-neve: #fafafa; /* texto primário modo escuro — ~20,12:1 sobre --color-tinteiro, extraído do institucional */
+  --color-grafite: #737373; /* texto secundário/ícones/bordas modo claro — extraído do institucional (~4,74:1 sobre --color-papel) */
 
-  --color-grafico-roxo: #c4923a; /* gráficos agregados (não organizados por concorrente) — reaproveita o latão; paleta categórica de concorrentes fica intacta em lib/categorical-colors.ts */
-  --color-grafico-azul: #3d6e94; /* "anil" — azul-cadastral, segunda cor de gráfico agregado */
+  /* Gráficos agregados (não organizados por concorrente — paleta
+     categórica de concorrentes fica intacta em lib/categorical-colors.ts):
+     "grafico-1" (antes "roxo", reaproveitava o latão) vira monocromático
+     como o resto — usa a própria cor de texto do tema, sem hue própria.
+     "grafico-2" ("anil") continua o único azul informativo que sobra,
+     mesmo raciocínio de erro/sucesso: é diferenciação funcional entre 2
+     séries de dado, não decoração de marca. */
+  --color-grafico-roxo: var(--color-tinta);
+  --color-grafico-azul: #3d6e94;
 
   --background: var(--color-papel);
   --foreground: var(--color-tinta);
-  --surface: #ffffff;
-  --surface-border: color-mix(in srgb, var(--color-grafite) 20%, transparent);
+  --surface: var(--color-carvao);
+  --surface-border: #e5e5e5; /* extraído do institucional (token "border" claro) */
   --muted: var(--color-grafite);
-  --signal: var(--color-latao);
-  /* Único valor de --*-text que escurece no modo CLARO em vez de clarear no
-     escuro (o inverso do padrão erro/sucesso abaixo) — --color-latao é um
-     dourado médio-claro, feito pra "brilhar" contra fundo escuro (passa
-     ~6,3:1 direto contra --color-tinteiro, ver .dark), mas contra
-     --color-papel (claro) o mesmo valor cheio cai pra ~2,5:1. */
-  --signal-text: #8a5f1f; /* ~4,99:1 sobre --color-papel */
+  /* Sem hue própria — o institucional não tem cor de acento, os CTAs de lá
+     são só o contraste máximo do tema (bg-foreground/text-background).
+     --signal-on é o texto POR CIMA de um fundo --signal preenchido (ex:
+     botão de CTA) — precisa ser o inverso do tema, não um tom fixo como
+     era com o latão (que funcionava igual nos dois temas por ser sempre
+     claro; --foreground não é). */
+  --signal: var(--foreground);
+  --signal-text: var(--foreground);
+  --signal-on: var(--background);
   --erro: var(--color-ferrugem);
-  --erro-text: var(--color-ferrugem); /* ~5,40:1 sobre --color-papel, valor cheio já serve */
+  --erro-text: var(--color-ferrugem); /* ~6,07:1 sobre --color-papel, valor cheio já serve */
   --sucesso: var(--color-musgo);
-  --sucesso-text: var(--color-musgo); /* ~5,41:1 sobre --color-papel, valor cheio já serve */
-  /* Fundo só da sidebar/nav lateral — branco no claro (mesmo tom de
-     --surface); no escuro agora é --color-breu, um tom PRÓPRIO (ver .dark
-     abaixo) — não reaproveita mais --color-carvao, a pedido explícito de
-     ter os 3 tons quase-pretos (fundo/nav/superfície) sutilmente distintos
-     entre si em vez de nav=cards. */
-  --nav: #ffffff;
+  --sucesso-text: var(--color-musgo); /* ~6,08:1 sobre --color-papel, valor cheio já serve */
+  --nav: var(--color-papel);
+  --radius: 0.625rem; /* extraído do institucional — usado pelo sweep de raio de borda ainda por vir, componentes atuais continuam com classes Tailwind fixas por ora */
 }
 
 .dark {
   --background: var(--color-tinteiro);
   --foreground: var(--color-neve);
-  --surface: var(--color-carvao);
-  --surface-border: color-mix(in srgb, var(--color-grafite) 35%, transparent);
-  --muted: var(--color-grafite);
-  /* fundo/borda (--signal/--erro/--sucesso) continuam com o valor cheio —
-     só usados a baixa opacidade, não precisam da variante clara.
-     Recalculado contra os 3 novos tons quase-pretos (não presumido): o
-     valor cheio de --color-latao passa ~7,1–7,4:1 (pior caso, contra
-     --color-breu, é ~7,13:1) — melhorou em vez de piorar, mesmo com o
-     fundo mais escuro, porque latão é um tom claro (o oposto aconteceria
-     se o acento fosse escuro). erro-text/sucesso-text abaixo, mesma
-     verificação: ambos melhoraram (piores casos ~6,15:1 e ~7,39:1). */
-  --signal-text: var(--color-latao);
-  --erro-text: #c97a75; /* ~6,15:1 sobre --color-carvao (pior caso dos 3 tons) */
-  --sucesso-text: #82ab3e; /* ~7,39:1 sobre --color-carvao (pior caso dos 3 tons) */
-  /* Nav agora usa --color-breu, tom próprio — não mais igual a --surface
-     (--color-carvao) como no modo claro. Distinta do fundo geral
-     (--color-tinteiro) e das superfícies elevadas por uma diferença bem
-     sutil de luminância (~1,01–1,04:1 entre os 3 tons) + a borda. */
-  --nav: var(--color-breu);
+  --surface: #060606; /* extraído do institucional (token "card" escuro) */
+  --surface-border: #ffffff1f; /* extraído do institucional (token "border" escuro, rgba(255,255,255,.12)) */
+  /* --color-grafite ganha o valor ESCURO aqui — no institucional
+     muted-foreground difere por tema (#737373 claro / #8f8f8f escuro),
+     diferente da geração anterior (um valor só, igual nos dois temas).
+     mini-charts.tsx referencia var(--color-grafite) direto — precisa
+     dessa redefinição pra acompanhar o tema, não só --muted. */
+  --color-grafite: #8f8f8f; /* extraído do institucional (token "muted-foreground" escuro) — ~6,49:1 sobre --background */
+  --erro-text: #c97a75; /* ~6,52:1 sobre --background */
+  --sucesso-text: #82ab3e; /* ~7,84:1 sobre --background */
+  /* Nav = mesmo tom de --surface — o institucional não distingue as duas
+     (token "sidebar" dele é igual ao "card"), diferente da geração
+     anterior deste arquivo (que tinha um 3º tom só pra nav, por pedido
+     explícito de outra época). Consolidado aqui pra ficar fiel à extração. */
+  --nav: var(--surface);
 }
 
 @theme inline {
@@ -99,13 +98,12 @@
   --color-signal: var(--signal);
   --color-signal-text: var(--signal-text);
   /* Texto sobre fundo preenchido com --color-signal (ex: botão de CTA) —
-     sempre ESCURO agora, nos dois temas: --color-latao é um dourado
-     médio-claro (luminância alta), o inverso do roxo antigo — texto claro
-     em cima não teria contraste (calculado: ~2,4:1, abaixo de AA), só
-     texto escuro funciona (~6,2:1). Referencia --color-tinta diretamente
-     (valor fixo, não redefinido em .dark — ver :root) porque o botão fica
-     sempre com o mesmo fundo dourado, independente do tema da página. */
-  --color-signal-on: var(--color-tinta);
+     --signal agora É o --foreground do tema (sem hue própria, ver :root),
+     então o texto por cima precisa ser o INVERSO por tema (--background),
+     não mais um tom fixo como era com o latão (que funcionava igual nos
+     dois temas por ser sempre um dourado claro). Mesmo padrão do botão
+     "Fale com a gente" do institucional: bg-foreground + text-background. */
+  --color-signal-on: var(--signal-on);
   --color-erro: var(--erro);
   --color-erro-texto: var(--erro-text);
   --color-sucesso: var(--sucesso);
@@ -115,12 +113,12 @@
   --color-grafico-azul: var(--color-grafico-azul);
   --font-sans: var(--font-body);
   --font-mono: var(--font-numeric);
-  /* BR Sonoma substituiu tanto o corpo (Manrope) quanto o título/saudação
-     (Fraunces) — não há mais uma segunda família de destaque, mas o token
-     font-display continua existindo (aponta pra --font-body) pra não
-     precisar caçar e trocar a classe em cada lugar que já usava
-     font-display; documenta intenção mesmo sendo a mesma fonte física. */
-  --font-display: var(--font-body);
+  /* Três famílias distintas de novo (ver app/layout.tsx) — mesmo trio do
+     institucional. --font-display (Space Grotesk) pra título/destaque,
+     --font-serif (Instrument Serif) pro acento itálico pontual dentro de
+     headlines, --font-sans (Inter, via --font-body) pro corpo/UI padrão. */
+  --font-display: var(--font-display);
+  --font-serif: var(--font-serif);
 }
 
 body {
@@ -134,10 +132,10 @@ body {
    renderiza mesmo em elementos que de fato têm overflow scrollável; aplicar
    a todos cobre body, feed do Painel, dropdown de notificações, tabelas de
    Relatórios (overflow-x-auto) e qualquer overflow-y:auto futuro, sem
-   precisar repetir em cada componente. --color-grafite é a mesma cor nos
-   dois temas (não redefinida em .dark, ver :root) — não precisa de variante
-   por tema. Track transparente (não a cor do container, que mudaria por
-   componente) — mais simples e funciona em qualquer superfície. */
+   precisar repetir em cada componente. --color-grafite tem variante própria
+   por tema agora (ver .dark) — a referência via var() aqui já acompanha
+   automaticamente. Track transparente (não a cor do container, que mudaria
+   por componente) — mais simples e funciona em qualquer superfície. */
 * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-grafite) 45%, transparent) transparent;

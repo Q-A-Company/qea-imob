@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -144,17 +145,29 @@ export function AccountSidebar({
         }`}
       >
         {/* Mesmo tratamento de marca de (dashboard)/sidebar.tsx (duplicado de
-            propósito, ver raciocínio no topo do arquivo) — "Q&A" sempre
-            visível, "Imob" + tagline reveladas no hover/foco/pin junto com os
-            labels dos itens abaixo. */}
+            propósito, ver raciocínio no topo do arquivo) — logo sempre
+            visível, tagline revelada no hover/foco/pin junto com os labels
+            dos itens abaixo. */}
         <div className="mb-4 flex items-start justify-between gap-2 px-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <p className="whitespace-nowrap font-display text-lg leading-tight font-bold text-signal-text">
-              Q&amp;A<span className={labelOpacityClass}>&nbsp;Imob</span>
-            </p>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            {/* Logo real da Q&A Company — mesmo tratamento de (dashboard)/sidebar.tsx */}
+            <Image
+              src="/brand/logo-black.png"
+              alt="Q&A Company"
+              width={28}
+              height={28}
+              className="block h-7 w-7 shrink-0 object-contain dark:hidden"
+            />
+            <Image
+              src="/brand/logo-white.png"
+              alt="Q&A Company"
+              width={28}
+              height={28}
+              className="hidden h-7 w-7 shrink-0 object-contain dark:block"
+            />
             {/* Sem whitespace-nowrap de propósito — ver comentário equivalente
                 em (dashboard)/sidebar.tsx. */}
-            <p className={`text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
+            <p className={`min-w-0 text-[11px] leading-tight text-muted ${labelOpacityClass}`}>
               Uma solução da Q&A Company.
             </p>
           </div>
